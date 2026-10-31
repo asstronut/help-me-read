@@ -1,32 +1,19 @@
 import { createClient } from '@supabase/supabase-js';
 import { beforeAll, describe, expect, test } from 'vitest';
-import { apiClient } from '../helpers/api-client';
+import {
+  PDF_SEGMENTS,
+  createThread,
+  lastPrompt,
+  listModels,
+  newBook,
+  selection,
+  signedInOwner,
+  streamedText,
+  type Api,
+  type ModelView,
+  type Segment,
+} from '../helpers/threads';
 import { INTRUDER, OWNER, ensureUser } from '../helpers/users';
-
-type Api = ReturnType<typeof apiClient>;
-type Segment = { seq: number; label: string; paragraphs: string[] };
-type ModelView = {
-  id: string;
-  provider: string;
-  label: string;
-  inputUsdPerMTok: number;
-  outputUsdPerMTok: number;
-  tested: boolean;
-  available: boolean;
-};
-
-const PDF_SEGMENTS: Segment[] = [
-  {
-    seq: 0,
-    label: 'Page 1',
-    paragraphs: [
-      'She sat on the bank. The bank was steep. She sat on the bank.',
-      'The river moved slowly under a pale and ephemeral light. Across the page break',
-    ],
-  },
-  { seq: 1, label: 'Page 2', paragraphs: ['into page two.', 'Ephemeral joys fade quickly.'] },
-  { seq: 2, label: 'Page 3', paragraphs: ['Final page.'] },
-];
 
 const FILLER =
   'the quiet river carried small boats past old stone bridges while patient readers turned pages beneath tall trees and listened to distant bells ring across the valley as evening settled slowly over every field and road'.split(
@@ -43,68 +30,6 @@ const EPUB_SEGMENTS: Segment[] = [
   { seq: 1, label: 'Two', paragraphs: ['Second chapter text.'] },
 ];
 
-const PDF_ANCHOR = { format: 'pdf', page: 1, rects: [{ x: 0.1, y: 0.1, w: 0.2, h: 0.02 }] };
-const EPUB_ANCHOR = { format: 'epub', cfi: 'epubcfi(/6/2!/4/2/1:0)' };
-
-async function signedInOwner(): Promise<Api> {
-  const api = apiClient();
-  expect((await api.login(OWNER.email, OWNER.password)).status).toBe(200);
-  return api;
-}
-
-async function newBook(api: Api, format: 'pdf' | 'epub', segments: Segment[] | null) {
-  const res = await api.post('/api/books', {
-    title: 'Sample Book',
-    author: 'Test Author',
-    format,
-    sizeBytes: 1234,
-  });
-  expect(res.status).toBe(201);
-  const { bookId } = (await res.json()) as { bookId: string };
-  if (segments) {
-    const posted = await api.post(`/api/books/${bookId}/segments`, { segments, done: true });
-    expect(posted.status).toBe(204);
-  }
-  return bookId;
-}
-
-function selection(
-  bookId: string,
-  segmentSeq: number,
-  text: string,
-  prefix: string,
-  format: 'pdf' | 'epub' = 'pdf',
-) {
-  return { bookId, segmentSeq, text, prefix, anchor: format === 'pdf' ? PDF_ANCHOR : EPUB_ANCHOR };
-}
-
-async function createThread(api: Api, body: Record<string, unknown>) {
-  const res = await api.post('/api/threads', body);
-  expect(res.status).toBe(201);
-  return (await res.json()) as { threadId: string; highlightId: string };
-}
-
-/** Concatenates the text deltas of an AI SDK UI message stream (SSE). */
-function streamedText(raw: string): string {
-  let text = '';
-  for (const line of raw.split('\n')) {
-    if (!line.startsWith('data: ')) continue;
-    const data = line.slice('data: '.length);
-    if (data === '[DONE]') continue;
-    const chunk = JSON.parse(data) as { type: string; delta?: string };
-    if (chunk.type === 'text-delta') text += chunk.delta ?? '';
-  }
-  return text;
-}
-
-async function lastPrompt(api: Api): Promise<string> {
-  const res = await api.get('/api/test/last-prompt');
-  expect(res.status).toBe(200);
-  const { prompt } = (await res.json()) as { prompt: string | null };
-  expect(prompt).not.toBeNull();
-  return prompt!;
-}
-
 async function answerPrompt(api: Api, body: Record<string, unknown>, chat: object = {}) {
   const { threadId } = await createThread(api, body);
   const raw = await api.streamText(`/api/threads/${threadId}/chat`, chat);
@@ -120,9 +45,7 @@ beforeAll(async () => {
   await ensureUser(OWNER.email, OWNER.password);
   await ensureUser(INTRUDER.email, INTRUDER.password);
   api = await signedInOwner();
-  const res = await api.get('/api/models');
-  expect(res.status).toBe(200);
-  models = ((await res.json()) as { models: ModelView[] }).models;
+  models = await listModels(api);
   flashId = models.find((m) => m.provider === 'google' && /flash/i.test(m.id))!.id;
 });
 

@@ -10,7 +10,7 @@ try {
 export const OWNER = { email: 'owner@test.local', password: 'owner-password-1' };
 export const INTRUDER = { email: 'intruder@test.local', password: 'intruder-password-1' };
 
-function adminClient() {
+export function adminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error('Supabase env vars are missing from .env.local');
@@ -32,6 +32,14 @@ export async function ensureUser(email: string, password: string): Promise<void>
   if (!existing) throw error;
   const { error: updateError } = await admin.auth.admin.updateUserById(existing.id, { password });
   if (updateError) throw updateError;
+}
+
+export async function userId(email: string): Promise<string> {
+  const { data, error } = await adminClient().auth.admin.listUsers({ perPage: 200 });
+  if (error) throw error;
+  const user = data.users.find((u) => u.email === email);
+  if (!user) throw new Error(`No user ${email}`);
+  return user.id;
 }
 
 /** Signs in directly with Supabase (bypassing the app's login) and returns the Cookie header the app would read. */

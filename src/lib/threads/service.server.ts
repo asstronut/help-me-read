@@ -1,9 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { streamText } from 'ai';
+import { streamText, type TextStreamPart, type ToolSet } from 'ai';
+import { after } from 'next/server';
 import { z } from 'zod';
+import { callCostUsd } from '@/lib/ai/cost';
 import { availableModels, resolveModel, type ModelInfo } from '@/lib/ai/models';
 import { buildFirstUserMessage, buildSystemPrompt } from '@/lib/ai/prompts';
 import { getLanguageModel } from '@/lib/ai/registry.server';
+import { assertWithinCap } from '@/lib/ai/spend.server';
 import { buildContext } from '@/lib/context/build';
 import type { Database } from '@/lib/supabase/database.types';
 import type { TestControls } from '@/lib/test-controls.server';
@@ -197,6 +200,7 @@ export async function getThread(supabase: Db, threadId: string) {
 export const ChatSchema = z.object({
   text: z.string().optional(),
   modelId: z.string().optional(),
+  reask: z.literal(true).optional(),
 });
 export type ChatInput = z.infer<typeof ChatSchema>;
 
@@ -261,8 +265,10 @@ async function saveMessage(
     role: 'user' | 'assistant';
     content: string;
     modelId?: string;
+    status?: StoredMessage['status'];
     inputTokens?: number;
     outputTokens?: number;
+    costUsd?: number;
   },
 ) {
   const { error } = await supabase.from('messages').insert({
@@ -270,16 +276,134 @@ async function saveMessage(
     role: message.role,
     content: message.content,
     model_id: message.modelId ?? null,
-    status: 'complete',
+    status: message.status ?? 'complete',
     input_tokens: message.inputTokens ?? 0,
     output_tokens: message.outputTokens ?? 0,
+    cost_usd: message.costUsd ?? 0,
   });
   if (error) throw error;
 }
 
+/** A user turn and the answers to it. Only a non-Ask thread's first turn has no question. */
+type Turn = { question: string | null; answers: StoredMessage[] };
+
+function toTurns(messages: StoredMessage[]): Turn[] {
+  const turns: Turn[] = [];
+  for (const m of messages) {
+    if (m.role === 'user') turns.push({ question: m.content, answers: [] });
+    else if (turns.length === 0) turns.push({ question: null, answers: [m] });
+    else turns[turns.length - 1].answers.push(m);
+  }
+  return turns;
+}
+
+/**
+ * The turns up to the one this request answers, which is last. Text adds a new turn; re-ask
+ * answers the latest turn again; an empty request asks for the first answer.
+ */
+function turnsToAnswer(
+  action: Action,
+  history: StoredMessage[],
+  input: ChatInput,
+): { turns: Turn[]; newQuestion?: string } {
+  const turns = toTurns(history);
+  let newQuestion: string | undefined;
+  if (input.reask) {
+    if (input.text !== undefined) throw fail(400, 'Re-ask takes no text');
+  } else if (input.text !== undefined) {
+    newQuestion = input.text.trim();
+    if (!newQuestion) throw fail(400, 'Write a question');
+    if (action !== 'ask' && history.length === 0) {
+      throw fail(400, 'Only Ask takes a question on the first turn');
+    }
+    turns.push({ question: newQuestion, answers: [] });
+  } else if (history.some((m) => m.role === 'assistant')) {
+    throw fail(409, 'This thread already has an answer.');
+  }
+  if (turns.length === 0) {
+    if (action === 'ask') throw fail(400, 'Ask needs a question');
+    turns.push({ question: null, answers: [] });
+  }
+  return { turns, newQuestion };
+}
+
+type PromptMessage = { role: 'user' | 'assistant'; content: string };
+
+/** Every turn as prompt messages, each earlier turn followed by its latest complete answer. */
+async function promptMessages(
+  supabase: Db,
+  thread: ThreadRecord,
+  turns: Turn[],
+): Promise<PromptMessage[]> {
+  const messages: PromptMessage[] = [];
+  for (const [i, turn] of turns.entries()) {
+    const content =
+      i === 0
+        ? await firstUserMessage(supabase, thread, turn.question ?? undefined)
+        : (turn.question ?? '');
+    messages.push({ role: 'user', content });
+    if (i === turns.length - 1) break;
+    const answer = turn.answers.findLast((a) => a.status === 'complete');
+    if (answer) messages.push({ role: 'assistant', content: answer.content });
+  }
+  return messages;
+}
+
+const OpenRouterCostSchema = z.object({
+  openrouter: z.object({ usage: z.object({ cost: z.number() }) }),
+});
+
+/**
+ * Reads the whole answer stream and saves the answer, whether or not the client is still listening.
+ * A provider error saves the text so far as failed, charged only for the usage the provider reported.
+ */
+async function saveAnswer(
+  supabase: Db,
+  threadId: string,
+  model: ModelInfo,
+  stream: AsyncIterable<TextStreamPart<ToolSet>>,
+): Promise<void> {
+  let content = '';
+  let failed = false;
+  const usage = { inputTokens: 0, outputTokens: 0 };
+  let reportedCostUsd: number | undefined;
+  try {
+    for await (const part of stream) {
+      if (part.type === 'text-delta') content += part.text;
+      else if (part.type === 'error' || part.type === 'abort') failed = true;
+      else if (part.type === 'finish-step') {
+        usage.inputTokens += part.usage.inputTokens ?? 0;
+        usage.outputTokens += part.usage.outputTokens ?? 0;
+        const reported = OpenRouterCostSchema.safeParse(part.providerMetadata);
+        if (reported.success) {
+          reportedCostUsd = (reportedCostUsd ?? 0) + reported.data.openrouter.usage.cost;
+        }
+      }
+    }
+  } catch {
+    failed = true;
+  }
+  await saveMessage(supabase, threadId, {
+    role: 'assistant',
+    content,
+    modelId: model.id,
+    status: failed ? 'failed' : 'complete',
+    ...usage,
+    costUsd: callCostUsd(model, usage, reportedCostUsd),
+  });
+}
+
+/** The response, with its stream held open until `work` settles. */
+function holdOpenUntil(response: Response, work: Promise<void>): Response {
+  if (!response.body) return response;
+  const body = response.body.pipeThrough(new TransformStream({ flush: () => work }));
+  return new Response(body, { status: response.status, headers: response.headers });
+}
+
 /**
  * Streams the thread's next answer as an AI SDK UI message stream. The prompt is rebuilt from stored
- * data on every turn; client history is never used. The answer is saved when the stream finishes.
+ * data on every turn; client history is never used. Refused with 402, before anything is saved, when
+ * the estimated cost would take this month's spend above the cap.
  */
 export async function streamAnswer(
   supabase: Db,
@@ -289,32 +413,25 @@ export async function streamAnswer(
 ): Promise<Response> {
   const thread = await loadThread(supabase, threadId);
   const history = await loadMessages(supabase, threadId);
-  if (history.length > 0) throw fail(409, 'This thread already has an answer.');
-
-  const question = input.text?.trim();
-  if (thread.action === 'ask' && !question) throw fail(400, 'Ask needs a question');
-  if (thread.action !== 'ask' && input.text !== undefined) {
-    throw fail(400, 'Only Ask takes a question on the first turn');
-  }
-
+  const { turns, newQuestion } = turnsToAnswer(thread.action, history, input);
   const model = await chooseModel(supabase, thread.action, input.modelId);
   const instructions = buildSystemPrompt(thread.action, EXPLANATION_LANGUAGE);
-  const firstMessage = await firstUserMessage(supabase, thread, question);
-  if (question) await saveMessage(supabase, threadId, { role: 'user', content: question });
+  const messages = await promptMessages(supabase, thread, turns);
+
+  const promptChars = [instructions, ...messages.map((m) => m.content)].join('\n\n').length;
+  await assertWithinCap(supabase, model, promptChars, controls.now);
+  if (newQuestion) await saveMessage(supabase, threadId, { role: 'user', content: newQuestion });
 
   const result = streamText({
     model: getLanguageModel(model.id, controls),
     instructions,
-    messages: [{ role: 'user', content: firstMessage }],
-    onEnd: async ({ text, totalUsage }) => {
-      await saveMessage(supabase, threadId, {
-        role: 'assistant',
-        content: text,
-        modelId: model.id,
-        inputTokens: totalUsage.inputTokens,
-        outputTokens: totalUsage.outputTokens,
-      });
-    },
+    messages,
+    providerOptions:
+      model.provider === 'openrouter' ? { openrouter: { usage: { include: true } } } : undefined,
   });
-  return result.toUIMessageStreamResponse();
+  const saved = saveAnswer(supabase, threadId, model, result.fullStream).catch((e: unknown) => {
+    console.error('Saving the answer failed', e);
+  });
+  after(saved);
+  return holdOpenUntil(result.toUIMessageStreamResponse(), saved);
 }
