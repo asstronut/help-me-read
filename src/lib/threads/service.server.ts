@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { streamText, type TextStreamPart, type ToolSet } from 'ai';
 import { after } from 'next/server';
 import { z } from 'zod';
-import { callCostUsd } from '@/lib/ai/cost';
+import { callCostUsd, costReportingOptions, reportedCostUsdOf } from '@/lib/ai/cost';
 import { availableModels, resolveModel, type ModelInfo } from '@/lib/ai/models';
 import { buildFirstUserMessage, buildSystemPrompt } from '@/lib/ai/prompts';
 import { getLanguageModel } from '@/lib/ai/registry.server';
@@ -24,7 +24,7 @@ type Db = SupabaseClient<Database>;
 
 const ACTIONS = ['translate', 'define', 'explain', 'simplify', 'ask'] as const;
 // Until settings exist (Task 13) every answer is in English.
-const EXPLANATION_LANGUAGE = 'English';
+export const EXPLANATION_LANGUAGE = 'English';
 
 const fail = (status: number, message: string) => Response.json({ message }, { status });
 const BOOK_NOT_FOUND = () => fail(404, 'Book not found');
@@ -195,7 +195,7 @@ export type ChatInput = z.infer<typeof ChatSchema>;
 
 const SettingsModelsSchema = z.partialRecord(z.enum(ACTIONS), z.string());
 
-async function settingsModels(supabase: Db): Promise<Partial<Record<Action, string>>> {
+export async function settingsModels(supabase: Db): Promise<Partial<Record<Action, string>>> {
   const { data, error } = await supabase.from('settings').select('action_models').maybeSingle();
   if (error) throw error;
   const parsed = SettingsModelsSchema.safeParse(data?.action_models ?? {});
@@ -338,10 +338,6 @@ async function promptMessages(
   return messages;
 }
 
-const OpenRouterCostSchema = z.object({
-  openrouter: z.object({ usage: z.object({ cost: z.number() }) }),
-});
-
 /**
  * Reads the whole answer stream and saves the answer, whether or not the client is still listening.
  * A provider error saves the text so far as failed, charged only for the usage the provider reported.
@@ -363,10 +359,8 @@ async function saveAnswer(
       else if (part.type === 'finish-step') {
         usage.inputTokens += part.usage.inputTokens ?? 0;
         usage.outputTokens += part.usage.outputTokens ?? 0;
-        const reported = OpenRouterCostSchema.safeParse(part.providerMetadata);
-        if (reported.success) {
-          reportedCostUsd = (reportedCostUsd ?? 0) + reported.data.openrouter.usage.cost;
-        }
+        const reported = reportedCostUsdOf(part.providerMetadata);
+        if (reported !== undefined) reportedCostUsd = (reportedCostUsd ?? 0) + reported;
       }
     }
   } catch {
@@ -415,8 +409,7 @@ export async function streamAnswer(
     model: getLanguageModel(model.id, controls),
     instructions,
     messages,
-    providerOptions:
-      model.provider === 'openrouter' ? { openrouter: { usage: { include: true } } } : undefined,
+    providerOptions: costReportingOptions(model),
   });
   const saved = saveAnswer(supabase, threadId, model, result.fullStream).catch((e: unknown) => {
     console.error('Saving the answer failed', e);

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ThreadPanel } from '@/components/thread/ThreadPanel';
 import type {
   Action,
+  Anchor,
   BookFormat,
   HighlightColor,
   HighlightView,
@@ -74,7 +75,30 @@ async function addNoteHighlight(
   }
 }
 
-export function ReadView({ bookId, threadId }: { bookId: string; threadId: string | null }) {
+/** Saves the selection to vocab; false when it could not be saved. Never rejects. */
+async function saveToVocab(selection: ReaderSelection): Promise<boolean> {
+  try {
+    const res = await fetch('/api/vocab', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ bookId: selection.bookId, selection }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+const NOTICE_MS = 2500;
+
+type Props = {
+  bookId: string;
+  threadId: string | null;
+  /** Opens the book here instead of at the saved position. */
+  at: Anchor | null;
+};
+
+export function ReadView({ bookId, threadId, at }: Props) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [failed, setFailed] = useState(false);
   const [current, setCurrent] = useState<Current | null>(null);
@@ -82,6 +106,7 @@ export function ReadView({ bookId, threadId }: { bookId: string; threadId: strin
   const [highlights, setHighlights] = useState<HighlightView[]>([]);
   const [editing, setEditing] = useState<HighlightView | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   // Tapping the same overlapping highlights again moves on to the next one.
   const lastTap = useRef<{ ids: string; index: number } | null>(null);
 
@@ -96,6 +121,12 @@ export function ReadView({ bookId, threadId }: { bookId: string; threadId: strin
     load(bookId).then(setLoaded, () => setFailed(true));
     refreshHighlights();
   }, [bookId, refreshHighlights]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [notice]);
 
   useEffect(() => {
     if (process.env.NEXT_PUBLIC_E2E === '1') window.__hmrSelection = current?.selection ?? null;
@@ -117,11 +148,18 @@ export function ReadView({ bookId, threadId }: { bookId: string; threadId: strin
   if (!loaded) return <p className="p-4 text-sm opacity-70">Loading…</p>;
 
   const onPick = (item: MenuItem) => {
-    if (current && item !== 'vocab') {
-      const { selection } = current;
-      setOpen((prev) => ({ key: (prev?.key ?? 0) + 1, threadId: null, action: item, selection }));
-    }
     setCurrent(null);
+    if (!current) return;
+    const { selection } = current;
+    if (item === 'vocab') {
+      setProblem(null);
+      void saveToVocab(selection).then((saved) => {
+        if (saved) setNotice('Saved to vocab');
+        else setProblem('Could not save to vocab.');
+      });
+      return;
+    }
+    setOpen((prev) => ({ key: (prev?.key ?? 0) + 1, threadId: null, action: item, selection }));
   };
 
   const onColor = (color: HighlightColor) => {
@@ -196,16 +234,23 @@ export function ReadView({ bookId, threadId }: { bookId: string; threadId: strin
           {problem}
         </p>
       )}
+      {notice && (
+        <p role="status" className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded bg-gray-900 px-3 py-1 text-sm text-white">
+          {notice}
+        </p>
+      )}
       {panel}
     </>
   );
   if (loaded.format === 'epub') {
+    const savedCfi = loaded.location && 'cfi' in loaded.location ? loaded.location.cfi : null;
+    const initialCfi = at?.format === 'epub' ? at.cfi : savedCfi;
     return (
       <>
         <EpubReader
           bookId={bookId}
           fileUrl={loaded.fileUrl}
-          initialCfi={loaded.location && 'cfi' in loaded.location ? loaded.location.cfi : null}
+          initialCfi={initialCfi}
           onSelection={onSelection}
           highlights={highlights}
           onHighlightTap={onHighlightTap}
@@ -214,7 +259,8 @@ export function ReadView({ bookId, threadId }: { bookId: string; threadId: strin
       </>
     );
   }
-  const initialPage = loaded.location && 'page' in loaded.location ? loaded.location.page : 1;
+  const savedPage = loaded.location && 'page' in loaded.location ? loaded.location.page : 1;
+  const initialPage = at?.format === 'pdf' ? at.page : savedPage;
   return (
     <>
       <PdfReader

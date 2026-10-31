@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { estimateTokens } from '@/lib/types';
 import type { ModelInfo } from './models';
 
@@ -20,4 +21,19 @@ export function callCostUsd(
 /** Estimated input cost of a prompt, in micro-dollars: chars ÷ 4 tokens at the input price. */
 export function estimateInputMicroUsd(model: ModelInfo, promptChars: number): number {
   return costMicroUsd(model, { inputTokens: estimateTokens(promptChars), outputTokens: 0 });
+}
+
+/** Asks OpenRouter to report each call's actual cost; other providers need nothing. */
+export function costReportingOptions(model: ModelInfo) {
+  return model.provider === 'openrouter' ? { openrouter: { usage: { include: true } } } : undefined;
+}
+
+const OpenRouterCostSchema = z.object({
+  openrouter: z.object({ usage: z.object({ cost: z.number() }) }),
+});
+
+/** The cost OpenRouter reported in a call's provider metadata, if any. */
+export function reportedCostUsdOf(providerMetadata: unknown): number | undefined {
+  const reported = OpenRouterCostSchema.safeParse(providerMetadata);
+  return reported.success ? reported.data.openrouter.usage.cost : undefined;
 }

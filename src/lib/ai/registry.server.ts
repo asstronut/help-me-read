@@ -8,7 +8,6 @@ import type { TestControls } from '@/lib/test-controls.server';
 import { MODELS } from './models';
 
 const MOCK_CHUNKS = ['MOCK ', 'ANS', 'WER'];
-const MOCK_USAGE = { inputTokens: 100, outputTokens: 50 };
 
 // Route modules can be bundled separately in dev, so the recorded prompt lives on globalThis.
 const LAST_PROMPT = Symbol.for('help-me-read.mock.lastPrompt');
@@ -30,10 +29,25 @@ function promptAsText(prompt: MockPrompt): string {
     .join('\n\n');
 }
 
+// 100 input and 50 output tokens per call.
+const MOCK_USAGE = {
+  inputTokens: { total: 100, noCache: 100, cacheRead: undefined, cacheWrite: undefined },
+  outputTokens: { total: 50, text: 50, reasoning: undefined },
+};
+
 function mockModel(modelId: string, controls: TestControls): LanguageModel {
   return new MockLanguageModelV4({
     provider: 'mock',
     modelId,
+    doGenerate: async ({ prompt }) => {
+      (globalThis as PromptStore)[LAST_PROMPT] = promptAsText(prompt);
+      return {
+        content: [{ type: 'text', text: MOCK_CHUNKS.join('') }],
+        finishReason: { unified: 'stop', raw: undefined },
+        usage: MOCK_USAGE,
+        warnings: [],
+      };
+    },
     doStream: async ({ prompt }) => {
       (globalThis as PromptStore)[LAST_PROMPT] = promptAsText(prompt);
       const chunks =
@@ -54,19 +68,7 @@ function mockModel(modelId: string, controls: TestControls): LanguageModel {
             controller.enqueue({
               type: 'finish',
               finishReason: { unified: 'stop', raw: undefined },
-              usage: {
-                inputTokens: {
-                  total: MOCK_USAGE.inputTokens,
-                  noCache: MOCK_USAGE.inputTokens,
-                  cacheRead: undefined,
-                  cacheWrite: undefined,
-                },
-                outputTokens: {
-                  total: MOCK_USAGE.outputTokens,
-                  text: MOCK_USAGE.outputTokens,
-                  reasoning: undefined,
-                },
-              },
+              usage: MOCK_USAGE,
             });
             controller.close();
           },

@@ -87,7 +87,12 @@ export default function LibraryPage() {
 
   return (
     <main className="mx-auto w-full max-w-2xl space-y-6 p-4 sm:p-6">
-      <h1 className="text-xl font-semibold">Library</h1>
+      <div className="flex items-center gap-3">
+        <h1 className="flex-1 text-xl font-semibold">Library</h1>
+        <Link href="/vocab" className="text-sm hover:underline">
+          Vocab
+        </Link>
+      </div>
       <UploadDropzone onUploaded={refresh} />
       {error && (
         <p role="alert" className="text-sm text-red-600">

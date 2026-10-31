@@ -19,6 +19,10 @@ const wordCount = (p: string) => (p === '' ? 0 : p.split(' ').length);
 type Position = { paragraph: number; offset: number };
 type Located = { start: Position; end: Position };
 
+/** A segment's paragraphs as the selection is captured: whitespace collapsed, empty ones dropped. */
+export const cleanParagraphs = (paragraphs: string[]) =>
+  paragraphs.map(normalise).filter((p) => p !== '');
+
 function commonSuffixLength(a: string, b: string): number {
   let n = 0;
   while (n < a.length && n < b.length && a[a.length - 1 - n] === b[b.length - 1 - n]) n++;
@@ -29,7 +33,7 @@ function commonSuffixLength(a: string, b: string): number {
  * Finds the selected text in the paragraphs (joined by single spaces, as the selection is captured).
  * With several occurrences, the one whose preceding text shares the longest suffix with the prefix wins; ties go to the first.
  */
-function locate(paragraphs: string[], text: string, prefix: string): Located | null {
+export function locate(paragraphs: string[], text: string, prefix: string): Located | null {
   const needle = normalise(text);
   if (needle === '') return null;
   const joined = paragraphs.join(' ');
@@ -107,9 +111,8 @@ export function buildContext({
   text,
   prefix,
 }: BuildContextInput): string {
-  const cleaned = (s: Segment) => s.paragraphs.map(normalise).filter((p) => p !== '');
   const segment = segments.find((s) => s.seq === segmentSeq);
-  const paragraphs = segment ? cleaned(segment) : [];
+  const paragraphs = segment ? cleanParagraphs(segment.paragraphs) : [];
   const located = locate(paragraphs, text, prefix);
 
   if (scope === 'page') return pageContext(format, paragraphs, located);
@@ -117,7 +120,8 @@ export function buildContext({
   return [...segments]
     .sort((a, b) => a.seq - b.seq)
     .map((s) => {
-      const body = s.seq === segmentSeq ? markParagraphs(paragraphs, located) : cleaned(s);
+      const body =
+        s.seq === segmentSeq ? markParagraphs(paragraphs, located) : cleanParagraphs(s.paragraphs);
       return [`## ${s.label}`, ...body].join('\n\n');
     })
     .join('\n\n');
