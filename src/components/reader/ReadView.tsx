@@ -243,19 +243,23 @@ export function ReadView({ bookId, threadId, at }: Props) {
       {panel}
     </>
   );
+  // On desktop the open thread panel (420 px) sits beside the book, so the book reflows into the rest.
+  const bookClass = open ? 'md:pr-[420px]' : undefined;
   if (loaded.format === 'epub') {
     const savedCfi = loaded.location && 'cfi' in loaded.location ? loaded.location.cfi : null;
     const initialCfi = at?.format === 'epub' ? at.cfi : savedCfi;
     return (
       <>
-        <EpubReader
-          bookId={bookId}
-          fileUrl={loaded.fileUrl}
-          initialCfi={initialCfi}
-          onSelection={onSelection}
-          highlights={highlights}
-          onHighlightTap={onHighlightTap}
-        />
+        <div className={bookClass}>
+          <EpubReader
+            bookId={bookId}
+            fileUrl={loaded.fileUrl}
+            initialCfi={initialCfi}
+            onSelection={onSelection}
+            highlights={highlights}
+            onHighlightTap={onHighlightTap}
+          />
+        </div>
         {menu}
       </>
     );
@@ -264,14 +268,16 @@ export function ReadView({ bookId, threadId, at }: Props) {
   const initialPage = at?.format === 'pdf' ? at.page : savedPage;
   return (
     <>
-      <PdfReader
-        bookId={bookId}
-        fileUrl={loaded.fileUrl}
-        initialPage={initialPage}
-        onSelection={onSelection}
-        highlights={highlights}
-        onHighlightTap={onHighlightTap}
-      />
+      <div className={bookClass}>
+        <PdfReader
+          bookId={bookId}
+          fileUrl={loaded.fileUrl}
+          initialPage={initialPage}
+          onSelection={onSelection}
+          highlights={highlights}
+          onHighlightTap={onHighlightTap}
+        />
+      </div>
       {menu}
     </>
   );

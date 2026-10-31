@@ -222,6 +222,14 @@ test('the panel is a right side panel on desktop and a bottom sheet on a phone',
     expect(box.width).toBe(420);
     expect(box.x + box.width).toBe(viewport.width);
     expect(box.height).toBe(viewport.height);
+    // The panel sits beside the book: the page reflows left of it instead of hiding under it.
+    const pdfPage = page.locator('.react-pdf__Page[data-page-number="2"]');
+    await expect
+      .poll(async () => {
+        const p = (await pdfPage.boundingBox())!;
+        return p.x + p.width;
+      })
+      .toBeLessThanOrEqual(box.x);
   }
 
   await panel(page).getByRole('button', { name: 'Close' }).click();
