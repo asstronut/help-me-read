@@ -13,7 +13,7 @@ cp .env.example .env.local  # fill in the values below
 npm run dev                 # http://localhost:3000
 ```
 
-Fill `.env.local` from the output of `npx supabase status`: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY`. Set `ALLOWED_EMAIL` to the one email that may sign in. Add any of `GOOGLE_GENERATIVE_AI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY` to use real models, or set `AI_MOCK=1` to use a fake model (local and test use only).
+Fill `.env.local` from the output of `npx supabase status`: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` (the last is used only by the tests, to arrange data). Set `ALLOWED_EMAIL` to the one email that may sign in. Add any of `GOOGLE_GENERATIVE_AI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY` to use real models, or set `AI_MOCK=1` to use a fake model (local and test use only; a production build ignores it).
 
 ## Tests
 

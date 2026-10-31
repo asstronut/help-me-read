@@ -5,7 +5,7 @@ One Supabase project (database, auth, file storage) and one Vercel project. The 
 ## 1. Create the Supabase project
 
 1. In the [Supabase dashboard](https://supabase.com/dashboard), create a project. Note the database password and the project ref (the `abcd1234` in `https://abcd1234.supabase.co`).
-2. From **Project Settings > API**, copy the project URL, the `anon` public key and the `service_role` key. The service role key is a secret: it goes only in Vercel's server env vars.
+2. From **Project Settings > API**, copy the project URL and the `anon` public key. The app does not use the `service_role` key; do not put it in Vercel.
 
 ## 2. Push the schema
 
@@ -35,16 +35,15 @@ Storage limits on the free plan: 50 MB per file and 1 GB in total. The app refus
    | --- | --- |
    | `NEXT_PUBLIC_SUPABASE_URL` | the Supabase project URL |
    | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | the `anon` key |
-   | `SUPABASE_SERVICE_ROLE_KEY` | the `service_role` key |
    | `ALLOWED_EMAIL` | the email of the one user |
    | `GOOGLE_GENERATIVE_AI_API_KEY` | optional: Gemini models |
    | `ANTHROPIC_API_KEY` | optional: Claude models |
    | `OPENAI_API_KEY` | optional: GPT models |
    | `OPENROUTER_API_KEY` | optional: Llama, Mistral and DeepSeek models |
 
-   Set at least one provider key; a model is offered only if its provider's key is set. Only the Supabase URL and anon key are public; every other value is a server secret.
+   Set at least one provider key; a model is offered only if its provider's key is set. Only the Supabase URL and anon key are public; every other value is a server secret. `SUPABASE_SERVICE_ROLE_KEY` in `.env.example` is for the local tests only.
 
-3. **Do not set `AI_MOCK` or `NEXT_PUBLIC_E2E` in production.**
+3. **Do not set `AI_MOCK` or `NEXT_PUBLIC_E2E` in production.** A production build ignores both, but they belong to local tests only:
    - `AI_MOCK=1` swaps the real models for a fake one, honours the `x-test-now` and `x-test-fail-after` test headers (which bypass the spend cap's clock), and turns on `GET /api/test/last-prompt`, which returns the last prompt.
    - `NEXT_PUBLIC_E2E=1` turns on a test-only page under `/__test` and exposes a debug global in the reader.
 4. Deploy. Note the production domain, for example `https://help-me-read.vercel.app`.
@@ -62,7 +61,7 @@ If you later add a custom domain, update both settings and keep the old redirect
 
 - Opening the production URL while signed out redirects to `/login`.
 - Signing in with the user from step 3 opens the library.
-- `GET https://<your-domain>/api/test/last-prompt` returns 404. If it does not, `AI_MOCK` is set; remove it and redeploy.
+- `GET https://<your-domain>/api/test/last-prompt` returns 404. A production build always answers 404 here; anything else means the deployment is not a production build.
 
 ## 7. Try the real models
 
