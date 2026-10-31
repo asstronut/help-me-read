@@ -29,7 +29,8 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: 2.122.0
-      - run: supabase start
+      # Only the services the tests use: fewer image pulls, less exposure to registry limits.
+      - run: supabase start -x realtime,imgproxy,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
       - name: Write .env.local from the local stack
         run: |
           {
