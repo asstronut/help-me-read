@@ -236,6 +236,24 @@ test('the panel is a right side panel on desktop and a bottom sheet on a phone',
   await expect(panel(page)).toHaveCount(0);
 });
 
+test('a link in an answer opens in a new tab, leaving the reader in place', async ({ page }) => {
+  // The mock answers "MOCK ANSWER"; its first chunk is swapped for a markdown link.
+  await page.route('**/api/threads/*/chat', async (route) => {
+    const response = await route.fetch();
+    const body = (await response.text()).replace(
+      '"delta":"MOCK "',
+      '"delta":"[a source](https://example.com/) "',
+    );
+    return route.fulfill({ response, body });
+  });
+  await openPdf(page);
+  await defineEphemeral(page);
+  const link = answers(page).first().getByRole('link', { name: 'a source' });
+  await expect(link).toHaveAttribute('href', 'https://example.com/');
+  await expect(link).toHaveAttribute('target', '_blank');
+  await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+});
+
 test('the panel follows the dark theme', async ({ page }) => {
   const settings = { explanationLanguage: 'English', actionModels: {}, monthlyCapUsd: 10 };
   // Theme belongs to the shared owner, so the light default is handed back afterwards.
