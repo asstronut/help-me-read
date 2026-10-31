@@ -113,6 +113,49 @@ test('a failed save is shown and retried until it goes through', async ({ page }
     .toEqual({ page: 2 });
 });
 
+/** Fails every PUT to the position endpoint with `status` and counts how many were made. */
+async function failPositionSaves(page: Page, status: number): Promise<() => number> {
+  let puts = 0;
+  await page.route('**/api/books/*/position', (route) => {
+    if (route.request().method() !== 'PUT') return route.continue();
+    puts += 1;
+    return route.fulfill({ status });
+  });
+  return () => puts;
+}
+
+test('a failed save stops retrying once the reader is left', async ({ page }) => {
+  await addSamplePdf(page);
+  await page.goto('/library');
+  const putCount = await failPositionSaves(page, 500);
+  await page.getByRole('link', { name: 'Sample Book' }).click();
+  await expect(pageInput(page)).toHaveValue('1');
+  await page.getByRole('button', { name: 'Next page' }).click();
+  await expect(page.getByText('Progress not saved')).toBeVisible();
+
+  await page.goBack();
+  await expect(page.getByRole('link', { name: 'Sample Book' })).toBeVisible();
+  await page.waitForTimeout(500);
+  const afterLeaving = putCount();
+  // an orphaned saver would retry after its backed-off delay (8 s here)
+  await page.waitForTimeout(9000);
+  expect(putCount()).toBe(afterLeaving);
+});
+
+test('being signed out stops saving and says so', async ({ page }) => {
+  const id = await addSamplePdf(page);
+  await page.goto(`/read/${id}`);
+  await expect(pageInput(page)).toHaveValue('1');
+  const putCount = await failPositionSaves(page, 401);
+  await page.getByRole('button', { name: 'Next page' }).click();
+  await expect(page.getByText('Signed out — progress not saved')).toBeVisible();
+
+  const afterFirst = putCount();
+  expect(afterFirst).toBeGreaterThan(0);
+  await page.waitForTimeout(5000);
+  expect(putCount()).toBe(afterFirst);
+});
+
 test('zoom buttons change the page size and fit-to-width restores it', async ({ page }) => {
   const id = await addSamplePdf(page);
   await page.goto(`/read/${id}`);

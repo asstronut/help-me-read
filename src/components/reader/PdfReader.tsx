@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/TextLayer.css';
-import { createPositionSaver } from '@/lib/reader/position-saver';
+import { createPositionSaver, PositionSaveError, type SaveResult } from '@/lib/reader/position-saver';
 import type { HighlightView, ReaderSelection } from '@/lib/types';
 import { ReaderToolbar } from './ReaderToolbar';
 
@@ -33,7 +33,7 @@ export default function PdfReader({ bookId, fileUrl, initialPage }: Props) {
   const [zoom, setZoom] = useState(1);
   const [containerWidth, setContainerWidth] = useState(0);
   const [error, setError] = useState(false);
-  const [saveFailed, setSaveFailed] = useState(false);
+  const [saveResult, setSaveResult] = useState<SaveResult>('saved');
   const scrollRef = useRef<HTMLDivElement>(null);
   const saverRef = useRef<ReturnType<typeof createPositionSaver> | null>(null);
 
@@ -54,10 +54,10 @@ export default function PdfReader({ bookId, fileUrl, initialPage }: Props) {
           body: JSON.stringify(location),
           keepalive: true,
         });
-        if (!res.ok) throw new Error(`Saving position failed: ${res.status}`);
+        if (!res.ok) throw new PositionSaveError(res.status);
       },
       undefined,
-      (saved) => setSaveFailed(!saved),
+      setSaveResult,
     );
     saverRef.current = saver;
     const onVisibility = () => {
@@ -66,7 +66,7 @@ export default function PdfReader({ bookId, fileUrl, initialPage }: Props) {
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
-      void saver.flush();
+      void saver.dispose();
       saverRef.current = null;
     };
   }, [bookId]);
@@ -92,9 +92,9 @@ export default function PdfReader({ bookId, fileUrl, initialPage }: Props) {
         onZoomOut={() => setZoom((z) => clampZoom(z - ZOOM_STEP))}
         onFitWidth={() => setZoom(1)}
       />
-      {saveFailed && (
+      {saveResult !== 'saved' && (
         <p role="status" className="px-3 py-1 text-xs text-amber-700">
-          Progress not saved
+          {saveResult === 'signed-out' ? 'Signed out — progress not saved' : 'Progress not saved'}
         </p>
       )}
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
