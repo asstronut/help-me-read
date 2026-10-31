@@ -1,12 +1,15 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { BookItem } from '@/lib/books/book-item';
+import { extractAndSave } from '@/lib/books/extract-and-save';
 import { UploadDropzone } from './upload-dropzone';
 
 export default function LibraryPage() {
   const [books, setBooks] = useState<BookItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [failed, setFailed] = useState<ReadonlySet<string>>(new Set());
+  const attempted = useRef(new Set<string>());
 
   const load = useCallback(async () => {
     try {
@@ -28,6 +31,42 @@ export default function LibraryPage() {
       // the next refresh will try again
     }
   }, []);
+
+  const prepare = useCallback(
+    async (book: BookItem) => {
+      attempted.current.add(book.id);
+      try {
+        const meta = await fetch(`/api/books/${book.id}`);
+        if (!meta.ok) throw new Error(String(meta.status));
+        const { fileUrl } = (await meta.json()) as { fileUrl: string };
+        const blob = await (await fetch(fileUrl)).blob();
+        const file = new File([blob], `${book.id}.${book.format}`);
+        await extractAndSave(book.id, file, book.format);
+      } catch {
+        setFailed((current) => new Set(current).add(book.id));
+      }
+      await refresh();
+    },
+    [refresh],
+  );
+
+  // Books whose text is not ready (a new upload, or an earlier attempt that was cut short)
+  // are prepared here, once per page visit.
+  useEffect(() => {
+    for (const book of books ?? []) {
+      if (!book.extracted && !attempted.current.has(book.id)) void prepare(book);
+    }
+  }, [books, prepare]);
+
+  function retry(book: BookItem) {
+    attempted.current.delete(book.id);
+    setFailed((current) => {
+      const next = new Set(current);
+      next.delete(book.id);
+      return next;
+    });
+    void prepare(book);
+  }
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch on mount
@@ -63,7 +102,21 @@ export default function LibraryPage() {
                 <p className="break-words font-medium">{book.title}</p>
                 {book.author && <p className="break-words text-sm opacity-70">{book.author}</p>}
               </div>
-              {!book.extracted && <span className="text-xs opacity-60">Preparing text…</span>}
+              {!book.extracted &&
+                (failed.has(book.id) ? (
+                  <>
+                    <span className="text-xs text-red-600">Couldn&apos;t prepare text</span>
+                    <button
+                      type="button"
+                      onClick={() => retry(book)}
+                      className="rounded px-2 py-1 text-sm hover:bg-gray-500/10"
+                    >
+                      Retry
+                    </button>
+                  </>
+                ) : (
+                  <span className="text-xs opacity-60">Preparing text…</span>
+                ))}
               <span className="text-xs uppercase opacity-60">{book.format}</span>
               <button
                 type="button"
