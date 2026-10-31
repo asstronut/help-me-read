@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/database.types';
-import { DEFAULT_MONTHLY_CAP_USD } from '@/lib/types';
+import { getSettings } from '@/lib/settings/settings.server';
 import { estimateInputMicroUsd } from './cost';
 import type { ModelInfo } from './models';
 
@@ -26,15 +26,12 @@ async function monthSpendMicroUsd(supabase: Db, now: Date): Promise<number> {
   return [...messages.data, ...events.data].reduce((sum, row) => sum + toMicro(row.cost_usd), 0);
 }
 
-// The cap moves to settings in Task 13.
-const monthlyCapUsd = () => DEFAULT_MONTHLY_CAP_USD;
-
 export async function getSpend(
   supabase: Db,
   now: Date,
 ): Promise<{ monthSpendUsd: number; capUsd: number }> {
   const spend = await monthSpendMicroUsd(supabase, now);
-  return { monthSpendUsd: spend / 1e6, capUsd: monthlyCapUsd() };
+  return { monthSpendUsd: spend / 1e6, capUsd: (await getSettings(supabase)).monthlyCapUsd };
 }
 
 /** Throws a 402 Response when this month's spend plus the prompt's estimated input cost is above the cap. */
@@ -45,7 +42,7 @@ export async function assertWithinCap(
   now: Date,
 ): Promise<void> {
   const spend = await monthSpendMicroUsd(supabase, now);
-  const cap = monthlyCapUsd();
+  const cap = (await getSettings(supabase)).monthlyCapUsd;
   if (spend + estimateInputMicroUsd(model, promptChars) > toMicro(cap)) {
     const message = `You've reached this month's AI limit of $${cap.toFixed(2)}. Raise it in Settings.`;
     throw Response.json({ message }, { status: 402 });

@@ -92,6 +92,9 @@ export default function LibraryPage() {
         <Link href="/vocab" className="text-sm hover:underline">
           Vocab
         </Link>
+        <Link href="/settings" className="text-sm hover:underline">
+          Settings
+        </Link>
       </div>
       <UploadDropzone onUploaded={refresh} />
       {error && (

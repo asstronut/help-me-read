@@ -10,7 +10,7 @@ import { assertWithinCap } from '@/lib/ai/spend.server';
 import { AnchorSchema, SelectionSchema } from '@/lib/selection/schema';
 import type { Database } from '@/lib/supabase/database.types';
 import type { TestControls } from '@/lib/test-controls.server';
-import { EXPLANATION_LANGUAGE, settingsModels } from '@/lib/threads/service.server';
+import { getSettings } from '@/lib/settings/settings.server';
 import type { Anchor, ReaderSelection } from '@/lib/types';
 import { sentenceAround } from './sentence';
 
@@ -146,11 +146,12 @@ export async function saveVocab(
 
 /** Asks the Define model for a one-line meaning and charges the call. Within the spend cap only. */
 async function fillMeaning(supabase: Db, entry: VocabEntryView, controls: TestControls) {
-  const model = resolveModel('define', await settingsModels(supabase), availableModels(process.env));
+  const settings = await getSettings(supabase);
+  const model = resolveModel('define', settings.actionModels, availableModels(process.env));
   const { instructions, prompt } = buildVocabMeaningPrompt(
     entry.term,
     entry.sentence,
-    EXPLANATION_LANGUAGE,
+    settings.explanationLanguage,
   );
   try {
     await assertWithinCap(supabase, model, `${instructions}\n\n${prompt}`.length, controls.now);

@@ -12,7 +12,8 @@ export type ReaderSelection = {
   prefix: string;
   anchor: Anchor;
 };
-export type Action = 'translate' | 'define' | 'explain' | 'simplify' | 'ask';
+export const ACTIONS = ['translate', 'define', 'explain', 'simplify', 'ask'] as const;
+export type Action = (typeof ACTIONS)[number];
 export type MenuItem = Action | 'vocab';
 export type ContextScope = 'page' | 'book';
 export type HighlightColor = 'yellow' | 'green' | 'blue' | 'pink';

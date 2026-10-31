@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import { Geist, Geist_Mono } from "next/font/google";
+import { currentTheme } from "@/lib/settings/settings.server";
+import { createClient } from "@/lib/supabase/server";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -17,11 +20,16 @@ export const metadata: Metadata = {
   description: "A single-user reader with AI actions",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+// The theme class on <html> comes from the signed-in user's settings, so every page waits for that read.
+export const instant = false;
+
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  await connection();
+  const theme = await currentTheme(await createClient());
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${theme} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

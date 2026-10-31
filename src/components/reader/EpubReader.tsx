@@ -38,7 +38,14 @@ function readFontSize(): number {
   }
 }
 
-const fontCss = (size: number) => `html, body, p { font-size: ${size}px !important; }`;
+/** Font size, and the page's theme colours (the chapter is drawn in an iframe that does not inherit them). */
+function readerCss(size: number): string {
+  const theme = getComputedStyle(document.documentElement);
+  const background = theme.getPropertyValue('--background');
+  const foreground = theme.getPropertyValue('--foreground');
+  return `html, body, p { font-size: ${size}px !important; }
+html, body { background: ${background} !important; color: ${foreground} !important; }`;
+}
 
 /** The range's box in the reader's viewport (the section is drawn in an iframe). */
 function boxInViewport(range: Range): SelectionBox {
@@ -180,7 +187,7 @@ export default function EpubReader({
       await view.open(fileUrl);
       if (cancelled) return;
       view.renderer.setAttribute('flow', 'paginated');
-      view.renderer.setStyles(fontCss(fontSizeRef.current));
+      view.renderer.setStyles(readerCss(fontSizeRef.current));
       await view.init({ lastLocation: initialCfi, showTextStart: true });
       viewRef.current = view;
       syncAnnotations(view);
@@ -202,7 +209,7 @@ export default function EpubReader({
     } catch {
       // the choice just won't be remembered
     }
-    viewRef.current?.renderer.setStyles(fontCss(size));
+    viewRef.current?.renderer.setStyles(readerCss(size));
   }
 
   return (

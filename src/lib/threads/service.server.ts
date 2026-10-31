@@ -8,10 +8,12 @@ import { buildFirstUserMessage, buildSystemPrompt } from '@/lib/ai/prompts';
 import { getLanguageModel } from '@/lib/ai/registry.server';
 import { assertWithinCap } from '@/lib/ai/spend.server';
 import { buildContext } from '@/lib/context/build';
+import { getSettings } from '@/lib/settings/settings.server';
 import { SelectionSchema } from '@/lib/selection/schema';
 import type { Database } from '@/lib/supabase/database.types';
 import type { TestControls } from '@/lib/test-controls.server';
 import {
+  ACTIONS,
   MAX_SELECTION_WORDS,
   type Action,
   type BookFormat,
@@ -22,9 +24,6 @@ import {
 
 type Db = SupabaseClient<Database>;
 
-const ACTIONS = ['translate', 'define', 'explain', 'simplify', 'ask'] as const;
-// Until settings exist (Task 13) every answer is in English.
-export const EXPLANATION_LANGUAGE = 'English';
 
 const fail = (status: number, message: string) => Response.json({ message }, { status });
 const BOOK_NOT_FOUND = () => fail(404, 'Book not found');
@@ -193,18 +192,13 @@ export const ChatSchema = z.object({
 });
 export type ChatInput = z.infer<typeof ChatSchema>;
 
-const SettingsModelsSchema = z.partialRecord(z.enum(ACTIONS), z.string());
-
-export async function settingsModels(supabase: Db): Promise<Partial<Record<Action, string>>> {
-  const { data, error } = await supabase.from('settings').select('action_models').maybeSingle();
-  if (error) throw error;
-  const parsed = SettingsModelsSchema.safeParse(data?.action_models ?? {});
-  return parsed.success ? parsed.data : {};
-}
-
-async function chooseModel(supabase: Db, action: Action, modelId?: string): Promise<ModelInfo> {
+function chooseModel(
+  action: Action,
+  actionModels: Partial<Record<Action, string>>,
+  modelId?: string,
+): ModelInfo {
   const available = availableModels(process.env);
-  if (modelId === undefined) return resolveModel(action, await settingsModels(supabase), available);
+  if (modelId === undefined) return resolveModel(action, actionModels, available);
   const chosen = available.find((m) => m.id === modelId);
   if (!chosen) throw fail(400, 'That model is not available');
   return chosen;
@@ -397,8 +391,9 @@ export async function streamAnswer(
   const thread = await loadThread(supabase, threadId);
   const history = await loadMessages(supabase, threadId);
   const { turns, newQuestion } = turnsToAnswer(thread.action, history, input);
-  const model = await chooseModel(supabase, thread.action, input.modelId);
-  const instructions = buildSystemPrompt(thread.action, EXPLANATION_LANGUAGE);
+  const settings = await getSettings(supabase);
+  const model = chooseModel(thread.action, settings.actionModels, input.modelId);
+  const instructions = buildSystemPrompt(thread.action, settings.explanationLanguage);
   const messages = await promptMessages(supabase, thread, turns);
 
   const promptChars = [instructions, ...messages.map((m) => m.content)].join('\n\n').length;
