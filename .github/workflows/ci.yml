@@ -18,6 +18,8 @@ jobs:
       - run: npx next typegen
       - run: npm run typecheck
       - uses: supabase/setup-cli@v1
+        with:
+          version: 2.122.0
       - run: supabase start
       - name: Write .env.local from the local stack
         run: |
