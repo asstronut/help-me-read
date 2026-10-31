@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+/* The theme is a class on <html>, set on the server from the user's settings. */
+:root,
+.light {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+}
+
+.sepia {
+  --background: #f4ecd8;
+  --foreground: #5b4636;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Dark inverts the page canvases; highlights are separate elements and stay as drawn. */
+.dark .react-pdf__Page canvas {
+  filter: invert(1) hue-rotate(180deg);
+}
