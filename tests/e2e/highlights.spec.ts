@@ -16,7 +16,21 @@ const PDF_SEGMENTS = [
   { seq: 2, label: 'Page 3', paragraphs: ['Final page.'] },
 ];
 
-/** A book with its fixture stored (and, for a PDF, its text prepared), arranged through the API. */
+// The sample EPUB's first chapter, as its text preparation reads it (see tests/fixtures/make-fixtures.ts).
+const FILLER =
+  'the quiet river carried small boats past old stone bridges while patient readers turned pages beneath tall trees and listened to distant bells ring across the valley as evening settled slowly over every field and road'.split(
+    ' ',
+  );
+function epubParagraph(n: number): string {
+  const words = [`P${n}`];
+  for (let i = 0; words.length < 60; i++) words.push(FILLER[(i + n) % FILLER.length]);
+  return words.join(' ');
+}
+const EPUB_SEGMENTS = [
+  { seq: 0, label: 'Chapter One', paragraphs: Array.from({ length: 12 }, (_, i) => epubParagraph(i + 1)) },
+];
+
+/** A book with its fixture stored and its text prepared, arranged through the API. */
 async function addBook(page: Page, format: 'pdf' | 'epub'): Promise<string> {
   const created = await page.request.post('/api/books', {
     data: { title: 'Sample Book', author: null, format, sizeBytes: 100 },
@@ -31,12 +45,10 @@ async function addBook(page: Page, format: 'pdf' | 'epub'): Promise<string> {
     body: readFileSync(`tests/fixtures/sample.${format}`),
   });
   expect(put.ok).toBe(true);
-  if (format === 'pdf') {
-    const segments = await page.request.post(`/api/books/${bookId}/segments`, {
-      data: { segments: PDF_SEGMENTS, done: true },
-    });
-    expect(segments.status()).toBe(204);
-  }
+  const segments = await page.request.post(`/api/books/${bookId}/segments`, {
+    data: { segments: format === 'pdf' ? PDF_SEGMENTS : EPUB_SEGMENTS, done: true },
+  });
+  expect(segments.status()).toBe(204);
   return bookId;
 }
 
@@ -266,6 +278,21 @@ async function epubWordBox(page: Page, frame: Frame, marker: string, word: strin
   return { ...inFrame, x: inFrame.x + frameBox.x, y: inFrame.y + frameBox.y };
 }
 
+/** The on-screen box of `word`, turning pages until it is on screen (a narrow screen paginates sooner). */
+async function epubWordOnScreen(page: Page, frame: Frame, marker: string, word: string): Promise<Box> {
+  const viewport = page.viewportSize()!;
+  let box = await epubWordBox(page, frame, marker, word);
+  for (let turns = 0; box.x + box.width > viewport.width && turns < 10; turns++) {
+    const before = box.x;
+    await page.getByRole('button', { name: 'Next page' }).click();
+    await expect.poll(async () => (await epubWordBox(page, frame, marker, word)).x).not.toBe(before);
+    box = await epubWordBox(page, frame, marker, word);
+  }
+  return box;
+}
+
+const centre = (box: Box) => ({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
+
 async function selectInParagraph(frame: Frame, marker: string, word: string) {
   await frame.evaluate(
     ({ marker, word }) => {
@@ -296,19 +323,125 @@ test('an EPUB note persists after a reload', async ({ page }) => {
 
   await page.reload();
   const reloaded = await chapterFrame(page);
-  // On a narrow screen the word may be a few pages in.
-  const viewport = page.viewportSize()!;
   await expect
     .poll(async () => {
-      const box = await epubWordBox(page, reloaded, 'P6', 'bridges');
-      const x = box.x + box.width / 2;
-      if (x > viewport.width) {
-        await page.getByRole('button', { name: 'Next page' }).click();
-        return 0;
-      }
-      await page.mouse.click(x, box.y + box.height / 2);
+      const { x, y } = centre(await epubWordOnScreen(page, reloaded, 'P6', 'bridges'));
+      await page.mouse.click(x, y);
       return editor(page).count();
     })
     .toBe(1);
   await expect(editor(page).getByRole('button', { name: 'Blue' })).toHaveAttribute('aria-pressed', 'true');
+});
+
+/** Highlights `word` in paragraph `marker` with a colour from the selection menu. */
+async function epubNote(page: Page, frame: Frame, marker: string, word: string, color: string) {
+  await selectInParagraph(frame, marker, word);
+  const created = page.waitForResponse(
+    (r) => r.url().endsWith('/api/highlights') && r.request().method() === 'POST',
+  );
+  await menu(page).getByRole('button', { name: `Highlight ${color}` }).click();
+  expect((await created).status()).toBe(201);
+}
+
+async function openEpub(page: Page): Promise<Frame> {
+  const bookId = await addBook(page, 'epub');
+  await page.goto(`/read/${bookId}`);
+  const frame = await chapterFrame(page);
+  await expect(frame.locator('p', { hasText: 'P6' })).not.toHaveCount(0);
+  return frame;
+}
+
+test('dragging a selection onto an EPUB highlight opens the menu, not the note editor', async ({ page }) => {
+  const frame = await openEpub(page);
+  await epubNote(page, frame, 'P6', 'bridges', 'blue');
+  await expect(menu(page)).toHaveCount(0);
+
+  const from = await epubWordOnScreen(page, frame, 'P6', 'stone');
+  const to = centre(await epubWordOnScreen(page, frame, 'P6', 'bridges'));
+  await page.mouse.move(from.x + 1, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 5 });
+  await page.mouse.up();
+
+  await expect(menu(page)).toBeVisible();
+  await expect(editor(page)).toHaveCount(0);
+});
+
+test('a note and a thread on the same EPUB words are both reachable', async ({ page }) => {
+  const frame = await openEpub(page);
+  await epubNote(page, frame, 'P6', 'bridges', 'pink');
+  await selectInParagraph(frame, 'P6', 'bridges');
+  await menu(page).getByRole('group', { name: 'Actions' }).getByRole('button', { name: 'Define' }).click();
+  await expect(panel(page).getByRole('article').first()).toContainText('MOCK ANSWER');
+  await panel(page).getByRole('button', { name: 'Close' }).click();
+  await expect(panel(page)).toHaveCount(0);
+
+  // A tap opens the most recent (the thread); tapping again reaches the next (the note).
+  const word = centre(await epubWordOnScreen(page, frame, 'P6', 'bridges'));
+  await page.mouse.click(word.x, word.y);
+  await expect(panel(page).getByRole('article').first()).toContainText('MOCK ANSWER');
+  await panel(page).getByRole('button', { name: 'Close' }).click();
+  await page.mouse.click(word.x, word.y);
+  await expect(editor(page).getByRole('button', { name: 'Pink' })).toHaveAttribute('aria-pressed', 'true');
+});
+
+/** Opens a Define thread on "Ephemeral" (page 2) and returns its id once answered. */
+async function defineEphemeral(page: Page): Promise<string> {
+  await expect(textLayer(page, 2)).toContainText('Ephemeral');
+  await selectOnPage(page, 2, 'Ephemeral');
+  const created = page.waitForResponse(
+    (r) => r.url().endsWith('/api/threads') && r.request().method() === 'POST',
+  );
+  await menu(page).getByRole('group', { name: 'Actions' }).getByRole('button', { name: 'Define' }).click();
+  const { threadId } = (await (await created).json()) as { threadId: string };
+  await expect(panel(page).getByRole('article').first()).toContainText('MOCK ANSWER');
+  return threadId;
+}
+
+test('deleting a thread from its panel removes its highlight and the thread', async ({ page }) => {
+  await openPdf(page);
+  const threadId = await defineEphemeral(page);
+  const marks = pdfPage(page, 2).locator('[data-highlight-kind="thread"]');
+  await expect(marks).not.toHaveCount(0);
+
+  await panel(page).getByRole('button', { name: 'Delete thread' }).click();
+  await expect(panel(page).getByText('Delete this conversation?')).toBeVisible();
+  await panel(page).getByRole('button', { name: 'Yes, delete' }).click();
+
+  await expect(panel(page)).toHaveCount(0);
+  await expect(marks).toHaveCount(0);
+  expect((await page.request.get(`/api/threads/${threadId}`)).status()).toBe(404);
+});
+
+test('a thread reopened by tapping its highlight can be deleted', async ({ page }) => {
+  await openPdf(page);
+  const threadId = await defineEphemeral(page);
+  await page.reload();
+  await showPdfPage(page, 2);
+  const mark = pdfPage(page, 2).locator('[data-highlight-kind="thread"]');
+  await tap(page, mark);
+  await expect(panel(page).getByRole('article').first()).toContainText('MOCK ANSWER');
+
+  await panel(page).getByRole('button', { name: 'Delete thread' }).click();
+  await panel(page).getByRole('button', { name: 'Cancel' }).click();
+  await expect(panel(page).getByRole('article')).toHaveCount(1);
+  await panel(page).getByRole('button', { name: 'Delete thread' }).click();
+  await panel(page).getByRole('button', { name: 'Yes, delete' }).click();
+  await expect(panel(page)).toHaveCount(0);
+  await expect(mark).toHaveCount(0);
+  expect((await page.request.get(`/api/threads/${threadId}`)).status()).toBe(404);
+});
+
+test('a failed thread delete says so and keeps the thread', async ({ page }) => {
+  await openPdf(page);
+  await defineEphemeral(page);
+  await page.route('**/api/highlights/*', (route) =>
+    route.request().method() === 'DELETE'
+      ? route.fulfill({ status: 500, body: 'Internal Server Error' })
+      : route.continue(),
+  );
+  await panel(page).getByRole('button', { name: 'Delete thread' }).click();
+  await panel(page).getByRole('button', { name: 'Yes, delete' }).click();
+  await expect(panel(page).getByText('Could not delete this thread.')).toBeVisible();
+  await expect(pdfPage(page, 2).locator('[data-highlight-kind="thread"]')).not.toHaveCount(0);
 });

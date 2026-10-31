@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ThreadPanel } from '@/components/thread/ThreadPanel';
 import type {
   Action,
@@ -82,6 +82,8 @@ export function ReadView({ bookId, threadId }: { bookId: string; threadId: strin
   const [highlights, setHighlights] = useState<HighlightView[]>([]);
   const [editing, setEditing] = useState<HighlightView | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  // Tapping the same overlapping highlights again moves on to the next one.
+  const lastTap = useRef<{ ids: string; index: number } | null>(null);
 
   const refreshHighlights = useCallback(() => {
     void loadHighlights(bookId).then((list) => {
@@ -99,8 +101,11 @@ export function ReadView({ bookId, threadId }: { bookId: string; threadId: strin
     if (process.env.NEXT_PUBLIC_E2E === '1') window.__hmrSelection = current?.selection ?? null;
   }, [current]);
 
-  const onSelection = (selection: ReaderSelection | null, box?: SelectionBox) =>
+  const onSelection = (selection: ReaderSelection | null, box?: SelectionBox) => {
     setCurrent(selection && box ? { selection, box } : null);
+    // A new selection (say, a double-click on a highlighted word) takes over from the note editor.
+    if (selection) setEditing(null);
+  };
 
   if (failed) {
     return (
@@ -132,7 +137,12 @@ export function ReadView({ bookId, threadId }: { bookId: string; threadId: strin
 
   const openThread = (id: string) => setOpen((prev) => ({ key: (prev?.key ?? 0) + 1, threadId: id }));
 
-  const onHighlightTap = (highlight: HighlightView) => {
+  /** Opens the most recent of the tapped highlights, or the next one when the same ones are tapped again. */
+  const onHighlightTap = (tapped: HighlightView[]) => {
+    const ids = tapped.map((h) => h.id).join();
+    const index = lastTap.current?.ids === ids ? (lastTap.current.index + 1) % tapped.length : 0;
+    lastTap.current = { ids, index };
+    const highlight = tapped[index];
     if (highlight.threadId) {
       setEditing(null);
       openThread(highlight.threadId);
@@ -145,6 +155,10 @@ export function ReadView({ bookId, threadId }: { bookId: string; threadId: strin
     <ThreadPanel
       key={open.key}
       onCreated={refreshHighlights}
+      onDeleted={(highlightId) => {
+        setHighlights((prev) => prev.filter((h) => h.id !== highlightId));
+        setOpen(null);
+      }}
       {...(open.threadId === null
         ? { threadId: null, action: open.action, selection: open.selection }
         : { threadId: open.threadId })}

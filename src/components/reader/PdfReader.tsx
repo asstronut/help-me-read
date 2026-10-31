@@ -4,9 +4,10 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEv
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { capturePdfSelection } from '@/lib/selection/capture-pdf';
+import { watchTaps } from '@/lib/selection/tap';
 import { watchSelection } from '@/lib/selection/watch';
 import type { HighlightView, ReaderSelection } from '@/lib/types';
-import { PdfHighlightLayer, highlightAt } from './PdfHighlightLayer';
+import { PdfHighlightLayer, highlightsAt } from './PdfHighlightLayer';
 import { ReaderToolbar } from './ReaderToolbar';
 import type { SelectionBox } from './SelectionMenu';
 import { usePositionSaver } from './usePositionSaver';
@@ -22,7 +23,8 @@ type Props = {
   initialPage: number;
   onSelection: (selection: ReaderSelection | null, box?: SelectionBox) => void;
   highlights: HighlightView[];
-  onHighlightTap: (highlight: HighlightView) => void;
+  /** The highlights under a tap, most recent first. */
+  onHighlightTap: (highlights: HighlightView[]) => void;
 };
 
 const MAX_FIT_WIDTH = 800;
@@ -31,8 +33,6 @@ const MAX_ZOOM = 3;
 const ZOOM_STEP = 0.25;
 // Pages this far from the current one are drawn; the rest are sized placeholders.
 const RENDER_AROUND = 1;
-// A press that moves further than this before release is a drag, not a tap.
-const TAP_SLOP_PX = 8;
 
 const clampZoom = (z: number) => Math.min(Math.max(z, MIN_ZOOM), MAX_ZOOM);
 
@@ -72,7 +72,7 @@ export default function PdfReader({
   const { save, status } = usePositionSaver(bookId);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pageRef = useRef(page);
-  const pressedAt = useRef<{ x: number; y: number } | null>(null);
+  const lastReleaseWasTap = useRef(false);
   const onSelectionRef = useRef(onSelection);
   useEffect(() => {
     pageRef.current = page;
@@ -90,6 +90,14 @@ export default function PdfReader({
   useEffect(() => {
     if (numPages > 0) save({ page });
   }, [page, numPages, save]);
+
+  useEffect(
+    () =>
+      watchTaps(document, (tap) => {
+        lastReleaseWasTap.current = tap;
+      }),
+    [],
+  );
 
   useEffect(
     () =>
@@ -112,18 +120,17 @@ export default function PdfReader({
 
   /** A tap on a highlight; the end of a drag (a selection being made) is not a tap. */
   function onClick(e: MouseEvent) {
-    const from = pressedAt.current;
-    if (!from || Math.hypot(e.clientX - from.x, e.clientY - from.y) > TAP_SLOP_PX) return;
+    if (!lastReleaseWasTap.current) return;
     const pageEl = (e.target as Element).closest<HTMLElement>('.react-pdf__Page[data-page-number]');
     if (!pageEl) return;
     const r = pageEl.getBoundingClientRect();
-    const tapped = highlightAt(
+    const tapped = highlightsAt(
       highlights,
       Number(pageEl.dataset.pageNumber),
       (e.clientX - r.left) / r.width,
       (e.clientY - r.top) / r.height,
     );
-    if (tapped) onHighlightTap(tapped);
+    if (tapped.length > 0) onHighlightTap(tapped);
   }
 
   function onScroll() {
@@ -155,9 +162,6 @@ export default function PdfReader({
       <div
         ref={scrollRef}
         onScroll={onScroll}
-        onPointerDown={(e) => {
-          pressedAt.current = { x: e.clientX, y: e.clientY };
-        }}
         onClick={onClick}
         className="min-h-0 flex-1 overflow-auto"
       >

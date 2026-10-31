@@ -8,6 +8,7 @@ import type {
   View,
 } from 'foliate-js/view.js';
 import { captureEpubSelection } from '@/lib/selection/capture-epub';
+import { watchTaps } from '@/lib/selection/tap';
 import { watchSelection } from '@/lib/selection/watch';
 import type { HighlightView, ReaderSelection } from '@/lib/types';
 import { HIGHLIGHT_FILLS, HIGHLIGHT_INKS } from './highlight-colors';
@@ -21,7 +22,8 @@ type Props = {
   initialCfi: string | null;
   onSelection: (selection: ReaderSelection | null, box?: SelectionBox) => void;
   highlights: HighlightView[];
-  onHighlightTap: (highlight: HighlightView) => void;
+  /** The highlights under a tap, most recent first. */
+  onHighlightTap: (highlights: HighlightView[]) => void;
 };
 
 const FONT_SIZE_KEY = 'hmr.fontSize';
@@ -47,14 +49,24 @@ function boxInViewport(range: Range): SelectionBox {
   return { top: r.top + dy, bottom: r.bottom + dy, left: r.left + dx, right: r.right + dx };
 }
 
-/** The book's EPUB highlights by CFI, the key foliate draws annotations under. */
-function byCfi(highlights: HighlightView[]): Map<string, HighlightView> {
-  const map = new Map<string, HighlightView>();
-  for (const h of highlights) if (h.anchor.format === 'epub') map.set(h.anchor.cfi, h);
+/**
+ * The book's EPUB highlights grouped by CFI, the key foliate draws an annotation under: highlights
+ * on the same words share one annotation, which draws them all.
+ */
+function byCfi(highlights: HighlightView[]): Map<string, HighlightView[]> {
+  const map = new Map<string, HighlightView[]>();
+  for (const h of highlights) {
+    if (h.anchor.format !== 'epub') continue;
+    const group = map.get(h.anchor.cfi);
+    if (group) group.push(h);
+    else map.set(h.anchor.cfi, [h]);
+  }
   return map;
 }
 
-const drawsDiffer = (a: HighlightView, b: HighlightView) => a.kind !== b.kind || a.color !== b.color;
+const looks = (group: HighlightView[]) => group.map((h) => `${h.id}:${h.kind}:${h.color}`).join();
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
 
 export default function EpubReader({
   bookId,
@@ -73,8 +85,8 @@ export default function EpubReader({
   const onSelectionRef = useRef(onSelection);
   const onHighlightTapRef = useRef(onHighlightTap);
   const highlightsRef = useRef(highlights);
-  // What the view has been asked to draw, by CFI.
-  const drawnRef = useRef(new Map<string, HighlightView>());
+  // What the view has been asked to draw, by CFI, oldest first.
+  const drawnRef = useRef(new Map<string, HighlightView[]>());
   useEffect(() => {
     fontSizeRef.current = fontSize;
     onSelectionRef.current = onSelection;
@@ -90,9 +102,9 @@ export default function EpubReader({
     for (const value of drawn.keys()) {
       if (!next.has(value)) view.deleteAnnotation({ value }).catch(() => undefined);
     }
-    for (const [value, h] of next) {
+    for (const [value, group] of next) {
       const old = drawn.get(value);
-      if (!old || drawsDiffer(old, h)) view.addAnnotation({ value }).catch(() => undefined);
+      if (!old || looks(old) !== looks(group)) view.addAnnotation({ value }).catch(() => undefined);
     }
   }, []);
 
@@ -106,6 +118,8 @@ export default function EpubReader({
     let cancelled = false;
     let view: View | null = null;
     let unwatch: (() => void) | undefined;
+    // Whether the last press in the section ended where it started; the end of a drag is not a tap.
+    let lastReleaseWasTap = false;
     (async () => {
       const [, { Overlayer }] = await Promise.all([
         import('foliate-js/view.js'),
@@ -120,10 +134,17 @@ export default function EpubReader({
         const current = e.currentTarget as View;
         unwatch?.();
         onSelectionRef.current(null);
-        unwatch = watchSelection(doc, (range) => {
+        const unwatchSelection = watchSelection(doc, (range) => {
           const selection = range && captureEpubSelection(range, bookId, index, current.getCFI(index, range));
           onSelectionRef.current(selection, range ? boxInViewport(range) : undefined);
         });
+        const unwatchTaps = watchTaps(doc, (tap) => {
+          lastReleaseWasTap = tap;
+        });
+        unwatch = () => {
+          unwatchSelection();
+          unwatchTaps();
+        };
       });
       // Each shown section gets a fresh overlay: draw its highlights again.
       view.addEventListener('create-overlay', (e) => {
@@ -134,14 +155,26 @@ export default function EpubReader({
       });
       view.addEventListener('draw-annotation', (e) => {
         const { draw, annotation } = (e as CustomEvent<DrawAnnotationDetail>).detail;
-        const h = drawnRef.current.get(annotation.value);
-        if (!h) return;
-        if (h.kind === 'thread') draw(Overlayer.underline, { color: HIGHLIGHT_INKS[h.color], width: 2 });
-        else draw(Overlayer.highlight, { color: HIGHLIGHT_FILLS[h.color] });
+        const group = drawnRef.current.get(annotation.value);
+        if (!group) return;
+        // Fills first, so a thread underline on the same words stays on top.
+        const ordered = [...group.filter((h) => h.kind === 'note'), ...group.filter((h) => h.kind === 'thread')];
+        draw((rects) => {
+          const g = document.createElementNS(SVG_NS, 'g');
+          for (const h of ordered) {
+            g.append(
+              h.kind === 'thread'
+                ? Overlayer.underline(rects, { color: HIGHLIGHT_INKS[h.color], width: 2 })
+                : Overlayer.highlight(rects, { color: HIGHLIGHT_FILLS[h.color] }),
+            );
+          }
+          return g;
+        });
       });
       view.addEventListener('show-annotation', (e) => {
-        const h = drawnRef.current.get((e as CustomEvent<ShowAnnotationDetail>).detail.value);
-        if (h) onHighlightTapRef.current(h);
+        if (!lastReleaseWasTap) return;
+        const group = drawnRef.current.get((e as CustomEvent<ShowAnnotationDetail>).detail.value);
+        if (group) onHighlightTapRef.current([...group].reverse());
       });
       host.append(view);
       await view.open(fileUrl);

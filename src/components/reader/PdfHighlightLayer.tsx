@@ -9,7 +9,7 @@ const percent = (n: number) => `${n * 100}%`;
 /**
  * One page's highlights, drawn inside the rendered page: rects are fractions of the page, so the
  * boxes follow it at any zoom. Notes are filled; threads get a dotted underline. Taps are found by
- * `highlightAt`, so the boxes never get in the way of selecting text.
+ * `highlightsAt`, so the boxes never get in the way of selecting text.
  */
 export function PdfHighlightLayer({ highlights }: { highlights: HighlightView[] }) {
   return (
@@ -41,17 +41,19 @@ export function PdfHighlightLayer({ highlights }: { highlights: HighlightView[] 
   );
 }
 
-/** The highlight under a point given as fractions of the page, most recent first. */
-export function highlightAt(
+/** The highlights under a point given as fractions of the page, most recent first. */
+export function highlightsAt(
   highlights: HighlightView[],
   page: number,
   x: number,
   y: number,
-): HighlightView | null {
-  for (let i = highlights.length - 1; i >= 0; i--) {
-    const h = highlights[i];
-    if (h.anchor.format !== 'pdf' || h.anchor.page !== page) continue;
-    if (h.anchor.rects.some((r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h)) return h;
-  }
-  return null;
+): HighlightView[] {
+  return highlights
+    .filter(
+      (h) =>
+        h.anchor.format === 'pdf' &&
+        h.anchor.page === page &&
+        h.anchor.rects.some((r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h),
+    )
+    .reverse();
 }

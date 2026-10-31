@@ -13,6 +13,8 @@ type Props = {
   onClose: () => void;
   /** A new thread (and its highlight) has been saved. */
   onCreated?: () => void;
+  /** The thread was deleted with its highlight. */
+  onDeleted?: (highlightId: string) => void;
 } & (
   | { threadId: string; action?: never; selection?: never }
   | { threadId: null; action: Action; selection: ReaderSelection }
@@ -54,7 +56,7 @@ async function messageOf(res: Response, fallback: string): Promise<string> {
   return typeof body?.message === 'string' ? body.message : fallback;
 }
 
-type Created = { threadId: string } | { problem: string };
+type Created = { threadId: string; highlightId: string } | { problem: string };
 
 /** Never rejects: any failure comes back as a problem to show. */
 async function createThread(
@@ -70,32 +72,53 @@ async function createThread(
       body: JSON.stringify({ bookId: selection.bookId, action, selection, scope }),
     });
     if (!res.ok) return { problem: await messageOf(res, problem) };
-    const body = (await res.json()) as { threadId?: unknown };
-    return typeof body.threadId === 'string' ? { threadId: body.threadId } : { problem };
+    const body = (await res.json()) as { threadId?: unknown; highlightId?: unknown };
+    return typeof body.threadId === 'string' && typeof body.highlightId === 'string'
+      ? { threadId: body.threadId, highlightId: body.highlightId }
+      : { problem };
   } catch {
     return { problem };
   }
 }
 
-type Stored = { action: Action; messages: ThreadMessage[] };
+type Stored = { action: Action; highlightId: string; messages: ThreadMessage[] };
 
 /** The thread as the server saved it, or null when it cannot be loaded. Never rejects. */
 async function loadThread(threadId: string): Promise<Stored | null> {
   try {
     const res = await fetch(`/api/threads/${threadId}`);
     if (!res.ok) return null;
-    const body = (await res.json()) as { thread?: { action?: unknown }; messages?: unknown };
+    const body = (await res.json()) as {
+      thread?: { action?: unknown; highlightId?: unknown };
+      messages?: unknown;
+    };
     const action = body.thread?.action;
-    if (typeof action !== 'string' || !(action in TITLES) || !Array.isArray(body.messages)) {
+    const highlightId = body.thread?.highlightId;
+    if (
+      typeof action !== 'string' ||
+      !(action in TITLES) ||
+      typeof highlightId !== 'string' ||
+      !Array.isArray(body.messages)
+    ) {
       return null;
     }
-    return { action: action as Action, messages: body.messages as ThreadMessage[] };
+    return { action: action as Action, highlightId, messages: body.messages as ThreadMessage[] };
   } catch {
     return null;
   }
 }
 
 const LOAD_PROBLEM: Problem = { message: 'Could not load this thread.', overCap: false };
+const DELETE_PROBLEM: Problem = { message: 'Could not delete this thread.', overCap: false };
+
+/** Deletes the thread's highlight, which takes the thread and its messages with it. Never rejects. */
+async function deleteHighlight(highlightId: string): Promise<boolean> {
+  try {
+    return (await fetch(`/api/highlights/${highlightId}`, { method: 'DELETE' })).ok;
+  } catch {
+    return false;
+  }
+}
 
 /** A refused chat request, read from the server's `{ message }`. */
 function describe(error: APICallError): Problem {
@@ -109,8 +132,11 @@ function describe(error: APICallError): Problem {
 
 /** A thread beside the reader (a bottom sheet on a phone): answers stream in, with follow-ups, re-ask and retry. */
 export function ThreadPanel(props: Props) {
-  const { onClose, onCreated } = props;
+  const { onClose, onCreated, onDeleted } = props;
   const [threadId, setThreadId] = useState(props.threadId);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [action, setAction] = useState<Action | null>(props.action ?? null);
   const [thread, setThread] = useState<ThreadMessage[]>([]);
   /** False until a reopened thread's messages have loaded. */
@@ -143,6 +169,7 @@ export function ThreadPanel(props: Props) {
       return;
     }
     setAction(stored.action);
+    setHighlightId(stored.highlightId);
     setThread(stored.messages);
     setLoaded(true);
   }
@@ -201,6 +228,7 @@ export function ThreadPanel(props: Props) {
       return;
     }
     setThreadId(created.threadId);
+    setHighlightId(created.highlightId);
     onCreated?.();
     await send(created.threadId, question === null ? {} : { text: question }, question);
   }
@@ -217,6 +245,7 @@ export function ThreadPanel(props: Props) {
       void loadThread(props.threadId).then((stored) => {
         if (!stored) return setProblem(LOAD_PROBLEM);
         setAction(stored.action);
+        setHighlightId(stored.highlightId);
         setThread(stored.messages);
         setLoaded(true);
       });
@@ -248,6 +277,19 @@ export function ThreadPanel(props: Props) {
     void send(threadId, { text, modelId: model }, text);
   }
 
+  async function confirmDelete() {
+    if (!highlightId) return;
+    setDeleting(true);
+    setProblem(null);
+    if (await deleteHighlight(highlightId)) {
+      onDeleted?.(highlightId);
+      return;
+    }
+    setProblem(DELETE_PROBLEM);
+    setDeleting(false);
+    setConfirmingDelete(false);
+  }
+
   const reask = () => {
     if (threadId && !busy) void send(threadId, { reask: true, modelId: model }, null);
   };
@@ -264,10 +306,45 @@ export function ThreadPanel(props: Props) {
     >
       <header className="flex items-center justify-between gap-2 border-b border-black/10 px-3 py-2">
         <h2 className="text-sm font-semibold">{action ? TITLES[action] : 'Thread'}</h2>
-        <button type="button" onClick={onClose} className="rounded px-2 py-1 text-sm hover:bg-black/5">
-          Close
-        </button>
+        <div className="flex gap-1">
+          {highlightId && !confirmingDelete && (
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(true)}
+              disabled={busy}
+              className="rounded px-2 py-1 text-sm text-red-600 hover:bg-black/5"
+            >
+              Delete thread
+            </button>
+          )}
+          <button type="button" onClick={onClose} className="rounded px-2 py-1 text-sm hover:bg-black/5">
+            Close
+          </button>
+        </div>
       </header>
+      {confirmingDelete && (
+        <div className="flex items-center justify-between gap-2 border-b border-black/10 bg-red-50 px-3 py-2 text-sm">
+          <span>Delete this conversation?</span>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={() => void confirmDelete()}
+              disabled={deleting}
+              className="rounded bg-red-600 px-2 py-1 text-white"
+            >
+              Yes, delete
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(false)}
+              disabled={deleting}
+              className="rounded px-2 py-1 hover:bg-black/5"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
         {thread.map((m) =>
