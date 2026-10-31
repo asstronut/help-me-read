@@ -38,12 +38,22 @@ const DOT_CLASSES: Record<HighlightColor, string> = {
 
 const GAP = 8;
 
-/** Above the selection, or below it when there is no room; kept inside the viewport. */
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+/**
+ * Above the selection, else below it, else (a selection taller than the screen) at the
+ * bottom of the screen; always inside the viewport.
+ */
 function placeNear(box: SelectionBox, width: number, height: number) {
-  const top = box.top - height - GAP >= GAP ? box.top - height - GAP : box.bottom + GAP;
+  const lowest = window.innerHeight - height - GAP;
+  const above = box.top - height - GAP;
+  const below = box.bottom + GAP;
+  const top = above >= GAP ? above : below <= lowest ? below : lowest;
   const centre = (box.left + box.right) / 2;
-  const left = Math.min(Math.max(centre - width / 2, GAP), window.innerWidth - width - GAP);
-  return { top, left };
+  return {
+    top: clamp(top, GAP, lowest),
+    left: clamp(centre - width / 2, GAP, window.innerWidth - width - GAP),
+  };
 }
 
 // Keeps the reader's text selection alive while a menu button is pressed.

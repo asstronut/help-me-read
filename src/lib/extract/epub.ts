@@ -2,14 +2,14 @@ import type { TocItem } from 'foliate-js/view.js';
 import type { Segment } from '@/lib/types';
 import { cleanParagraphs } from './paragraphs';
 
-const BLOCK_TAGS = new Set([
+export const BLOCK_TAGS = new Set([
   'address', 'article', 'aside', 'blockquote', 'body', 'dd', 'details', 'div', 'dl', 'dt',
   'fieldset', 'figcaption', 'figure', 'footer', 'form', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
   'header', 'li', 'main', 'nav', 'ol', 'p', 'pre', 'section', 'table', 'tbody', 'td', 'tfoot',
   'th', 'thead', 'tr', 'ul',
 ]);
 const HEADING = /^h[1-6]$/;
-const SKIPPED_TAGS = new Set(['script', 'style']);
+export const SKIPPED_TAGS = new Set(['script', 'style']);
 
 type Paragraph = { text: string; tag: string | null };
 

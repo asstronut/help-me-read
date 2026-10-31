@@ -1,4 +1,5 @@
 import { PREFIX_CHARS, type ReaderSelection, type Rect } from '@/lib/types';
+import { plainText } from './plain-text';
 
 const PAGE = '.react-pdf__Page[data-page-number]';
 const TEXT_LAYER = '.react-pdf__Page__textContent';
@@ -6,20 +7,15 @@ const TEXT_LAYER = '.react-pdf__Page__textContent';
 const elementOf = (node: Node): Element | null =>
   node instanceof Element ? node : node.parentElement;
 
-/** The range's text, with line breaks (`<br>`) and page ends read as spaces. */
-function textOf(range: Range): string {
-  const fragment = range.cloneContents();
-  for (const br of fragment.querySelectorAll('br')) br.replaceWith(' ');
-  for (const layer of fragment.querySelectorAll(TEXT_LAYER)) layer.append(' ');
-  return fragment.textContent ?? '';
-}
+// Each page's text layer is a block of its own; its lines are split by <br>.
+const isTextLayer = (el: Element) => el.matches(TEXT_LAYER);
 
 /**
  * Reads a selection made in a PDF text layer. It belongs to the page it starts on:
  * the rects cover only that page's part of it, normalised to the page.
  */
 export function capturePdfSelection(range: Range, bookId: string): ReaderSelection | null {
-  const text = textOf(range).replace(/\s+/g, ' ').trim();
+  const text = plainText(range, isTextLayer).trim();
   const pageEl = elementOf(range.startContainer)?.closest(PAGE);
   const layer = pageEl?.querySelector(TEXT_LAYER);
   if (!text || !pageEl || !layer) return null;
@@ -28,7 +24,7 @@ export function capturePdfSelection(range: Range, bookId: string): ReaderSelecti
   const before = document.createRange();
   before.setStart(layer, 0);
   before.setEnd(range.startContainer, range.startOffset);
-  const prefix = textOf(before).slice(-PREFIX_CHARS);
+  const prefix = plainText(before, isTextLayer).trimStart().slice(-PREFIX_CHARS);
 
   return {
     bookId,

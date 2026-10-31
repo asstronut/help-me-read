@@ -191,6 +191,29 @@ test('the menu sits above the selection on desktop and docks to the bottom on a 
   }
 });
 
+test('a selection taller than the screen keeps the menu on screen', async ({ page }) => {
+  await openPdf(page);
+  // scroll page 2 to the top, so the selection starts above the screen and ends below it
+  await page.locator('[data-slot="2"]').evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await expect(page.getByLabel('Page number')).toHaveValue('2');
+  await expect(page.locator('.react-pdf__Page[data-page-number="3"] .react-pdf__Page__textContent')).toContainText(
+    'Final page.',
+  );
+  await selectPdfText(
+    page,
+    { pageNumber: 1, text: 'She sat on the bank.', edge: 'start' },
+    { pageNumber: 3, text: 'Final page.', edge: 'end' },
+  );
+  await expect(menu(page)).toBeVisible();
+  expect((await currentSelection(page))!.segmentSeq).toBe(0);
+  const box = (await menu(page).boundingBox())!;
+  const viewport = page.viewportSize()!;
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+  expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+});
+
 test('a passage over 2,000 words is refused', async ({ page }) => {
   await page.goto('/__test/menu?words=2001');
   await expect(menu(page)).toHaveText('Select a shorter passage');
@@ -208,21 +231,28 @@ async function chapterFrame(page: Page): Promise<Frame> {
   return page.frames().find((f) => f !== page.mainFrame() && f.url() !== 'about:blank')!;
 }
 
+/** Selects `word` (its first occurrence) in the chapter paragraph starting with `marker`. */
+async function selectInParagraph(frame: Frame, marker: string, word: string) {
+  await expect(frame.locator('p', { hasText: marker })).not.toHaveCount(0);
+  await frame.evaluate(
+    ({ marker, word }) => {
+      const p = [...document.querySelectorAll('p')].find((el) => el.textContent?.startsWith(`${marker} `))!;
+      const node = p.firstChild as Text;
+      const at = node.data.indexOf(word);
+      const range = document.createRange();
+      range.setStart(node, at);
+      range.setEnd(node, at + word.length);
+      document.getSelection()!.removeAllRanges();
+      document.getSelection()!.addRange(range);
+    },
+    { marker, word },
+  );
+}
+
 test('selecting a word in an EPUB chapter opens the menu for that section', async ({ page }) => {
   const id = await addBook(page, 'epub');
   await page.goto(`/read/${id}`);
-  const frame = await chapterFrame(page);
-  await expect(frame.locator('p', { hasText: 'P6' })).toHaveCount(1);
-  await frame.evaluate(() => {
-    const p = [...document.querySelectorAll('p')].find((el) => el.textContent?.startsWith('P6'))!;
-    const node = p.firstChild as Text;
-    const at = node.data.indexOf('bridges');
-    const range = document.createRange();
-    range.setStart(node, at);
-    range.setEnd(node, at + 'bridges'.length);
-    document.getSelection()!.removeAllRanges();
-    document.getSelection()!.addRange(range);
-  });
+  await selectInParagraph(await chapterFrame(page), 'P6', 'bridges');
   await expect(actions(page).first()).toHaveText('Define');
   const selection = (await currentSelection(page))!;
   expect(selection.bookId).toBe(id);
@@ -230,4 +260,15 @@ test('selecting a word in an EPUB chapter opens the menu for that section', asyn
   expect(selection.text).toBe('bridges');
   expect(selection.anchor.format).toBe('epub');
   expect(selection.prefix).toMatch(/P6 past old stone $/);
+});
+
+test('an EPUB prefix reads like the extracted paragraphs', async ({ page }) => {
+  const id = await addBook(page, 'epub');
+  await page.goto(`/read/${id}`);
+  await selectInParagraph(await chapterFrame(page), 'P7', 'P7');
+  await expect(menu(page)).toBeVisible();
+  const { prefix } = (await currentSelection(page))!;
+  // P6 ends "... across the valley as evening"; P7 follows it as a separate paragraph
+  expect(prefix.endsWith('across the valley as evening ')).toBe(true);
+  expect(prefix).not.toMatch(/\s\s|\n/);
 });
