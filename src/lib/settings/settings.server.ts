@@ -29,15 +29,27 @@ const SettingsSchema = z.object({
   theme: z.enum(THEMES),
 });
 
-/** The valid settings, or null when a field is out of range or a chosen model is not available. */
-export function validateSettings(input: unknown): Settings | null {
+const FIELD_LABELS: Record<string, string> = {
+  explanationLanguage: 'Explanation language must be 1 to 40 characters',
+  actionModels: 'Choose a model from the list for each action',
+  monthlyCapUsd: 'Monthly cap must be between 0 and 1000',
+  theme: 'Theme must be light, dark or sepia',
+};
+
+/** The valid settings, or a message naming the first invalid field. */
+export function validateSettings(input: unknown): { settings: Settings } | { error: string } {
   const parsed = SettingsSchema.safeParse(input);
-  if (!parsed.success) return null;
+  if (!parsed.success) {
+    const field = String(parsed.error.issues[0]?.path[0] ?? '');
+    return { error: FIELD_LABELS[field] ?? 'Those settings are not valid' };
+  }
   const available = availableModels(process.env);
-  const allAvailable = Object.values(parsed.data.actionModels).every((id) =>
-    available.some((m) => m.id === id),
+  const unavailable = Object.values(parsed.data.actionModels).find(
+    (id) => !available.some((m) => m.id === id),
   );
-  return allAvailable ? parsed.data : null;
+  return unavailable === undefined
+    ? { settings: parsed.data }
+    : { error: `The model "${unavailable}" is not available` };
 }
 
 function fromRow(row: Row): Settings {
@@ -81,9 +93,9 @@ export async function saveSettings(supabase: Db, userId: string, settings: Setti
 
 /** The theme to render pages with; light without a session (the login page). */
 export async function currentTheme(supabase: Db): Promise<Theme> {
-  const { data } = await supabase.auth.getUser();
-  if (!data.user) return DEFAULT_SETTINGS.theme;
   try {
+    const { data } = await supabase.auth.getUser();
+    if (!data.user) return DEFAULT_SETTINGS.theme;
     return (await getSettings(supabase)).theme;
   } catch {
     return DEFAULT_SETTINGS.theme;

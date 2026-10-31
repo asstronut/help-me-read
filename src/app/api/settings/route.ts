@@ -18,12 +18,10 @@ export async function GET(req: Request) {
 export async function PUT(req: Request) {
   try {
     const { supabase, userId } = await requireUser();
-    const settings = validateSettings(await req.json().catch(() => null));
-    if (!settings) {
-      return Response.json({ message: 'Those settings are not valid' }, { status: 400 });
-    }
-    await saveSettings(supabase, userId, settings);
-    return Response.json({ settings });
+    const result = validateSettings(await req.json().catch(() => null));
+    if ('error' in result) return Response.json({ message: result.error }, { status: 400 });
+    await saveSettings(supabase, userId, result.settings);
+    return Response.json({ settings: result.settings });
   } catch (e) {
     if (e instanceof Response) return e;
     throw e;

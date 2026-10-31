@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
+import { OWNER, adminClient, userId } from '../helpers/users';
 
 test.use({ storageState: 'tests/e2e/.auth/owner.json' });
 
@@ -56,4 +57,40 @@ test('the settings page does not scroll sideways', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
   const width = await page.evaluate(() => document.documentElement.scrollWidth);
   expect(width).toBeLessThanOrEqual(page.viewportSize()!.width);
+});
+
+test('signing in through the form shows the saved theme without a reload', async ({ page, browser, baseURL }) => {
+  await page.request.put('/api/settings', { data: { ...DEFAULTS, theme: 'dark' } });
+  const fresh = await browser.newContext({ baseURL, storageState: { cookies: [], origins: [] } });
+  try {
+    const login = await fresh.newPage();
+    await login.goto('/login');
+    await expect(login.locator('html')).toHaveClass(/\blight\b/);
+    await login.getByLabel('Email').fill(OWNER.email);
+    await login.getByLabel('Password').fill(OWNER.password);
+    await login.getByRole('button', { name: 'Sign in' }).click();
+    await expect(login).toHaveURL(/\/library$/, { timeout: 60_000 });
+    await expect(login.locator('html')).toHaveClass(/\bdark\b/);
+  } finally {
+    await fresh.close();
+  }
+});
+
+test('a stored model that is no longer available is dropped, so settings still save', async ({ page }) => {
+  const admin = adminClient();
+  const { error } = await admin
+    .from('settings')
+    .upsert({ owner_id: await userId(OWNER.email), action_models: { define: 'retired-model-9' } });
+  expect(error).toBeNull();
+
+  await page.goto('/settings');
+  await page.getByLabel('Explanation language').fill('French');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByText('Saved')).toBeVisible();
+
+  const body = (await (await page.request.get('/api/settings')).json()) as {
+    settings: { explanationLanguage: string; actionModels: object };
+  };
+  expect(body.settings.explanationLanguage).toBe('French');
+  expect(body.settings.actionModels).toEqual({});
 });

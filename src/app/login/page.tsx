@@ -1,10 +1,8 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
@@ -25,7 +23,9 @@ export default function LoginPage() {
       return;
     }
     if (body.magicLink) setMessage(json.message ?? 'Check your email');
-    else router.push('/library');
+    // A full navigation, so the root layout re-renders with the signed-in user's theme.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- a soft push would keep the layout rendered without a session
+    else window.location.href = '/library';
   }
 
   function onSubmit(e: FormEvent) {

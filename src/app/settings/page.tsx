@@ -37,7 +37,11 @@ export default function SettingsPage() {
         const body = (await s.json()) as { settings: Settings; monthSpendUsd: number };
         const modelList = ((await m.json()) as { models: ModelView[] }).models;
         if (signal.aborted) return;
-        setSettings(body.settings);
+        const availableIds = new Set(modelList.filter((x) => x.available).map((x) => x.id));
+        const actionModels = Object.fromEntries(
+          Object.entries(body.settings.actionModels).filter(([, id]) => availableIds.has(id)),
+        );
+        setSettings({ ...body.settings, actionModels });
         setCap(String(body.settings.monthlyCapUsd));
         setSpend(body.monthSpendUsd);
         setModels(modelList.filter((x) => x.available));
@@ -71,7 +75,12 @@ export default function SettingsPage() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ ...settings, monthlyCapUsd: Number(cap) }),
       });
-      if (!res.ok) throw new Error(String(res.status));
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { message?: string };
+        setStatus('idle');
+        setError(body.message ?? 'Could not save. Please try again.');
+        return;
+      }
       const saved = ((await res.json()) as { settings: Settings }).settings;
       setSettings(saved);
       setCap(String(saved.monthlyCapUsd));
@@ -80,7 +89,7 @@ export default function SettingsPage() {
       setStatus('saved');
     } catch {
       setStatus('idle');
-      setError('Could not save. Use a language of 1–40 characters and a cap between 0 and 1000.');
+      setError('Could not save. Please try again.');
     }
   }
 
