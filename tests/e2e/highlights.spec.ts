@@ -291,6 +291,26 @@ async function epubWordOnScreen(page: Page, frame: Frame, marker: string, word: 
   return box;
 }
 
+/**
+ * The centre of `word` once the chapter has stopped moving. Opening or closing the thread panel
+ * on desktop resizes the book beside it, and the chapter re-lays out.
+ */
+async function settledWordCentre(page: Page, frame: Frame, marker: string, word: string) {
+  let last = '';
+  await expect
+    .poll(
+      async () => {
+        const now = JSON.stringify(await epubWordBox(page, frame, marker, word));
+        const same = now === last;
+        last = now;
+        return same;
+      },
+      { intervals: [250] },
+    )
+    .toBe(true);
+  return centre(await epubWordOnScreen(page, frame, marker, word));
+}
+
 const centre = (box: Box) => ({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
 
 async function selectInParagraph(frame: Frame, marker: string, word: string) {
@@ -377,11 +397,12 @@ test('a note and a thread on the same EPUB words are both reachable', async ({ p
   await expect(panel(page)).toHaveCount(0);
 
   // A tap opens the most recent (the thread); tapping again reaches the next (the note).
-  const word = centre(await epubWordOnScreen(page, frame, 'P6', 'bridges'));
+  const word = await settledWordCentre(page, frame, 'P6', 'bridges');
   await page.mouse.click(word.x, word.y);
   await expect(panel(page).getByRole('article').first()).toContainText('MOCK ANSWER');
   await panel(page).getByRole('button', { name: 'Close' }).click();
-  await page.mouse.click(word.x, word.y);
+  const again = await settledWordCentre(page, frame, 'P6', 'bridges');
+  await page.mouse.click(again.x, again.y);
   await expect(editor(page).getByRole('button', { name: 'Pink' })).toHaveAttribute('aria-pressed', 'true');
 });
 
