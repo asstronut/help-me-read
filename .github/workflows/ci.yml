@@ -1,6 +1,8 @@
 name: ci
+# Branch pushes run through their pull request, so each PR commit runs once.
 on:
   push:
+    branches: [master]
   pull_request:
 jobs:
   test:
@@ -17,6 +19,14 @@ jobs:
       - run: npm ci
       - run: npx next typegen
       - run: npm run typecheck
+      - run: npm run lint
+      - name: Production build
+        # The build only needs the public Supabase settings to exist; it calls nothing.
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: build-placeholder
+        # Remove the production output so the tests' dev server starts clean.
+        run: npm run build && rm -rf .next
       - uses: supabase/setup-cli@v1
         with:
           version: 2.122.0
