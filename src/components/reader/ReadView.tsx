@@ -2,7 +2,8 @@
 
 import dynamic from 'next/dynamic';
 import { useEffect, useState } from 'react';
-import type { BookFormat, ReaderSelection, ReadingLocation } from '@/lib/types';
+import { ThreadPanel } from '@/components/thread/ThreadPanel';
+import type { Action, BookFormat, MenuItem, ReaderSelection, ReadingLocation } from '@/lib/types';
 import { SelectionMenu, type SelectionBox } from './SelectionMenu';
 
 // pdf.js needs the browser, so the reader is never rendered on the server.
@@ -19,6 +20,12 @@ declare global {
 
 type Loaded = { format: BookFormat; fileUrl: string; location: ReadingLocation | null };
 
+/** The thread in the panel: an existing one, or a new one on the picked selection. Each opening gets its own key. */
+type OpenThread = { key: number } & (
+  | { threadId: string }
+  | { threadId: null; action: Action; selection: ReaderSelection }
+);
+
 async function load(bookId: string): Promise<Loaded> {
   const [book, position] = await Promise.all([
     fetch(`/api/books/${bookId}`),
@@ -30,10 +37,11 @@ async function load(bookId: string): Promise<Loaded> {
   return { format, fileUrl, location };
 }
 
-export function ReadView({ bookId }: { bookId: string }) {
+export function ReadView({ bookId, threadId }: { bookId: string; threadId: string | null }) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [failed, setFailed] = useState(false);
   const [current, setCurrent] = useState<Current | null>(null);
+  const [open, setOpen] = useState<OpenThread | null>(threadId ? { key: 0, threadId } : null);
 
   useEffect(() => {
     load(bookId).then(setLoaded, () => setFailed(true));
@@ -55,13 +63,36 @@ export function ReadView({ bookId }: { bookId: string }) {
   }
   if (!loaded) return <p className="p-4 text-sm opacity-70">Loading…</p>;
 
-  const menu = current && (
-    <SelectionMenu
-      selection={current.selection}
-      box={current.box}
-      onPick={() => setCurrent(null)}
-      onColor={() => undefined}
+  const onPick = (item: MenuItem) => {
+    if (current && item !== 'vocab') {
+      const { selection } = current;
+      setOpen((prev) => ({ key: (prev?.key ?? 0) + 1, threadId: null, action: item, selection }));
+    }
+    setCurrent(null);
+  };
+
+  const panel = open && (
+    <ThreadPanel
+      key={open.key}
+      {...(open.threadId === null
+        ? { threadId: null, action: open.action, selection: open.selection }
+        : { threadId: open.threadId })}
+      onClose={() => setOpen(null)}
     />
+  );
+
+  const menu = (
+    <>
+      {current && (
+        <SelectionMenu
+          selection={current.selection}
+          box={current.box}
+          onPick={onPick}
+          onColor={() => undefined}
+        />
+      )}
+      {panel}
+    </>
   );
   if (loaded.format === 'epub') {
     return (

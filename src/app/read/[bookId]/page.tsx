@@ -1,15 +1,22 @@
 import { Suspense } from 'react';
 import { ReadView } from '@/components/reader/ReadView';
 
-async function Reader({ params }: { params: Promise<{ bookId: string }> }) {
+type PageProps = {
+  params: Promise<{ bookId: string }>;
+  searchParams: Promise<{ thread?: string | string[] }>;
+};
+
+async function Reader({ params, searchParams }: PageProps) {
   const { bookId } = await params;
-  return <ReadView bookId={bookId} />;
+  const { thread } = await searchParams;
+  // `?thread=<id>` reopens that thread beside the book.
+  return <ReadView bookId={bookId} threadId={typeof thread === 'string' ? thread : null} />;
 }
 
-export default function ReadPage({ params }: { params: Promise<{ bookId: string }> }) {
+export default function ReadPage(props: PageProps) {
   return (
     <Suspense fallback={<p className="p-4 text-sm opacity-70">Loading…</p>}>
-      <Reader params={params} />
+      <Reader {...props} />
     </Suspense>
   );
 }

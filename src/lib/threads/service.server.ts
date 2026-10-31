@@ -433,5 +433,9 @@ export async function streamAnswer(
     console.error('Saving the answer failed', e);
   });
   after(saved);
-  return holdOpenUntil(result.toUIMessageStreamResponse(), saved);
+  // The panel labels the answer with its model as soon as the stream starts.
+  const response = result.toUIMessageStreamResponse({
+    messageMetadata: ({ part }) => (part.type === 'start' ? { modelId: model.id } : undefined),
+  });
+  return holdOpenUntil(response, saved);
 }
