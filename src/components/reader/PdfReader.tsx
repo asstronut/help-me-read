@@ -33,6 +33,7 @@ export default function PdfReader({ bookId, fileUrl, initialPage }: Props) {
   const [zoom, setZoom] = useState(1);
   const [containerWidth, setContainerWidth] = useState(0);
   const [error, setError] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const saverRef = useRef<ReturnType<typeof createPositionSaver> | null>(null);
 
@@ -45,22 +46,27 @@ export default function PdfReader({ bookId, fileUrl, initialPage }: Props) {
   }, []);
 
   useEffect(() => {
-    const saver = createPositionSaver(async (location) => {
-      await fetch(`/api/books/${bookId}/position`, {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(location),
-        keepalive: true,
-      });
-    });
+    const saver = createPositionSaver(
+      async (location) => {
+        const res = await fetch(`/api/books/${bookId}/position`, {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(location),
+          keepalive: true,
+        });
+        if (!res.ok) throw new Error(`Saving position failed: ${res.status}`);
+      },
+      undefined,
+      (saved) => setSaveFailed(!saved),
+    );
     saverRef.current = saver;
     const onVisibility = () => {
-      if (document.visibilityState === 'hidden') void saver.flush().catch(() => undefined);
+      if (document.visibilityState === 'hidden') void saver.flush();
     };
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
-      void saver.flush().catch(() => undefined);
+      void saver.flush();
       saverRef.current = null;
     };
   }, [bookId]);
@@ -86,6 +92,11 @@ export default function PdfReader({ bookId, fileUrl, initialPage }: Props) {
         onZoomOut={() => setZoom((z) => clampZoom(z - ZOOM_STEP))}
         onFitWidth={() => setZoom(1)}
       />
+      {saveFailed && (
+        <p role="status" className="px-3 py-1 text-xs text-amber-700">
+          Progress not saved
+        </p>
+      )}
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
         {error && (
           <p role="alert" className="p-4 text-sm text-red-600">

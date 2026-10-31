@@ -77,16 +77,40 @@ test('hiding the tab saves the position immediately', async ({ page }) => {
   await pageInput(page).press('Enter');
   await expect(currentPage(page)).toHaveAttribute('data-page-number', '3');
 
+  // the 2 s save timer is still running, so a request this soon can only come from the flush
+  const saved = page.waitForRequest(
+    (r) => r.method() === 'PUT' && r.url().endsWith(`/api/books/${id}/position`),
+    { timeout: 1000 },
+  );
   await page.evaluate(() => {
     Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
     document.dispatchEvent(new Event('visibilitychange'));
   });
+  expect(JSON.parse((await saved).postData() ?? '{}')).toEqual({ page: 3 });
   await expect
     .poll(async () => (await (await page.request.get(`/api/books/${id}/position`)).json()).location)
     .toEqual({ page: 3 });
 
   await page.reload();
   await expect(currentPage(page)).toHaveAttribute('data-page-number', '3');
+});
+
+test('a failed save is shown and retried until it goes through', async ({ page }) => {
+  const id = await addSamplePdf(page);
+  await page.goto(`/read/${id}`);
+  await expect(pageInput(page)).toHaveValue('1');
+
+  await page.route('**/api/books/*/position', (route) =>
+    route.request().method() === 'PUT' ? route.fulfill({ status: 500 }) : route.continue(),
+  );
+  await page.getByRole('button', { name: 'Next page' }).click();
+  await expect(page.getByText('Progress not saved')).toBeVisible();
+
+  await page.unroute('**/api/books/*/position');
+  await expect(page.getByText('Progress not saved')).toHaveCount(0, { timeout: 8000 });
+  await expect
+    .poll(async () => (await (await page.request.get(`/api/books/${id}/position`)).json()).location)
+    .toEqual({ page: 2 });
 });
 
 test('zoom buttons change the page size and fit-to-width restores it', async ({ page }) => {
