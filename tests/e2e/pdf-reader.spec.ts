@@ -113,6 +113,32 @@ test('a failed save is shown and retried until it goes through', async ({ page }
     .toEqual({ page: 2 });
 });
 
+test('hiding the tab sends the newest page even while an earlier save hangs', async ({ page }) => {
+  const id = await addSamplePdf(page);
+  await page.goto(`/read/${id}`);
+  await expect(pageInput(page)).toHaveValue('1');
+
+  let puts = 0;
+  await page.route('**/api/books/*/position', (route) => {
+    if (route.request().method() !== 'PUT') return route.continue();
+    puts += 1;
+    return puts === 1 ? undefined : route.continue(); // the first save never gets a response
+  });
+  const first = page.waitForRequest((r) => r.method() === 'PUT');
+  await page.getByRole('button', { name: 'Next page' }).click();
+  await first;
+
+  await pageInput(page).fill('3');
+  await pageInput(page).press('Enter');
+  await expect(currentPage(page)).toHaveAttribute('data-page-number', '3');
+  const second = page.waitForRequest((r) => r.method() === 'PUT', { timeout: 1000 });
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  expect(JSON.parse((await second).postData() ?? '{}')).toEqual({ page: 3 });
+});
+
 /** Fails every PUT to the position endpoint with `status` and counts how many were made. */
 async function failPositionSaves(page: Page, status: number): Promise<() => number> {
   let puts = 0;

@@ -21,6 +21,7 @@ type Props = {
 };
 
 const MAX_FIT_WIDTH = 800;
+const SAVE_TIMEOUT_MS = 10_000;
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 3;
 const ZOOM_STEP = 0.25;
@@ -53,6 +54,7 @@ export default function PdfReader({ bookId, fileUrl, initialPage }: Props) {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(location),
           keepalive: true,
+          signal: AbortSignal.timeout(SAVE_TIMEOUT_MS),
         });
         if (!res.ok) throw new PositionSaveError(res.status);
       },

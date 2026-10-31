@@ -11,10 +11,10 @@ export type SaveResult = 'saved' | 'failed' | 'signed-out';
 const MAX_DELAY_MS = 30_000;
 
 /**
- * Saves at most once per interval, always the latest location, one save at a time.
- * `flush` saves any pending location now (used when the tab is hidden). A failed save keeps
- * the location and retries with a doubling delay unless a newer one has arrived; a 401/403
- * stops saving. `dispose` makes a final attempt, then never retries or reports again.
+ * Saves at most once per interval, always the latest location. `flush` sends any pending
+ * location right away, even while an earlier save is still in flight. A failed save keeps its
+ * location and retries with a doubling delay, unless a newer location has been sent since; a
+ * 401/403 stops saving. `dispose` makes a final attempt, then never retries or reports again.
  */
 export function createPositionSaver(
   save: (location: ReadingLocation) => Promise<void>,
@@ -26,38 +26,35 @@ export function createPositionSaver(
   let delay = intervalMs;
   let stopped = false;
   let disposed = false;
-  let queue: Promise<void> = Promise.resolve();
+  let sent = 0;
 
   function arm() {
     if (!stopped && !disposed) timer ??= setTimeout(() => void flush(), delay);
   }
 
-  async function run(): Promise<void> {
+  async function flush(): Promise<void> {
+    if (timer) clearTimeout(timer);
+    timer = null;
     const location = pending;
     pending = null;
     if (!location || stopped) return;
+    const seq = ++sent;
     try {
       await save(location);
       delay = intervalMs;
-      if (!disposed) onResult?.('saved');
+      if (!disposed && seq === sent) onResult?.('saved');
     } catch (e) {
-      pending ??= location;
       if (e instanceof PositionSaveError && (e.status === 401 || e.status === 403)) {
         stopped = true;
         if (!disposed) onResult?.('signed-out');
         return;
       }
       delay = Math.min(delay * 2, MAX_DELAY_MS);
+      if (seq !== sent) return; // a newer location was sent meanwhile; it supersedes this one
+      pending ??= location;
       arm();
       if (!disposed) onResult?.('failed');
     }
-  }
-
-  function flush(): Promise<void> {
-    if (timer) clearTimeout(timer);
-    timer = null;
-    queue = queue.then(run);
-    return queue;
   }
 
   return {
