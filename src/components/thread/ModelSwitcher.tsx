@@ -20,7 +20,7 @@ export function ModelSwitcher({ models, value, onChange, disabled }: Props) {
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className="min-w-0 flex-1 rounded border border-black/20 bg-white px-1 py-0.5"
+        className="min-w-0 flex-1 rounded border border-foreground/20 bg-background px-1 py-0.5"
       >
         {value === '' && <option value="">Default</option>}
         {models.map((m) => (

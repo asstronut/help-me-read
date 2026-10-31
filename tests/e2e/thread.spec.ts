@@ -236,6 +236,21 @@ test('the panel is a right side panel on desktop and a bottom sheet on a phone',
   await expect(panel(page)).toHaveCount(0);
 });
 
+test('the panel follows the dark theme', async ({ page }) => {
+  const settings = { explanationLanguage: 'English', actionModels: {}, monthlyCapUsd: 10 };
+  // Theme belongs to the shared owner, so the light default is handed back afterwards.
+  await page.request.put('/api/settings', { data: { ...settings, theme: 'dark' } });
+  try {
+    await openPdf(page);
+    await defineEphemeral(page);
+    await expect(answers(page).first()).toContainText('MOCK ANSWER');
+    const background = await panel(page).evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(background).not.toBe('rgb(255, 255, 255)');
+  } finally {
+    await page.request.put('/api/settings', { data: { ...settings, theme: 'light' } });
+  }
+});
+
 /**
  * Lets the chat request reach the server with the mock failing at once, but drops the stream's
  * `start` chunk, so the browser sees an error before any answer starts. The server has still

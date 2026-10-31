@@ -81,7 +81,7 @@ export function SelectionMenu({ selection, box, onPick, onColor }: Props) {
       aria-label="Selection menu"
       style={style}
       onMouseDown={keepSelection}
-      className="fixed inset-x-0 bottom-0 z-50 flex flex-col gap-2 border-t border-black/10 bg-white p-2 text-sm text-black shadow-lg sm:inset-x-auto sm:bottom-auto sm:top-(--menu-top) sm:left-(--menu-left) sm:w-max sm:rounded-lg sm:border"
+      className="fixed inset-x-0 bottom-0 z-50 flex flex-col gap-2 border-t border-foreground/10 bg-background p-2 text-sm text-foreground shadow-lg sm:inset-x-auto sm:bottom-auto sm:top-(--menu-top) sm:left-(--menu-left) sm:w-max sm:rounded-lg sm:border"
     >
       {tooLong ? (
         <p className="px-2 py-1">Select a shorter passage</p>
@@ -94,7 +94,7 @@ export function SelectionMenu({ selection, box, onPick, onColor }: Props) {
                 type="button"
                 aria-label={`Highlight ${color}`}
                 onClick={() => onColor(color)}
-                className={`size-6 rounded-full border border-black/20 ${DOT_CLASSES[color]}`}
+                className={`size-6 rounded-full border border-foreground/20 ${DOT_CLASSES[color]}`}
               />
             ))}
           </div>
@@ -104,7 +104,7 @@ export function SelectionMenu({ selection, box, onPick, onColor }: Props) {
                 key={item}
                 type="button"
                 onClick={() => onPick(item)}
-                className="rounded px-2 py-1 hover:bg-black/5"
+                className="rounded px-2 py-1 hover:bg-foreground/5"
               >
                 {LABELS[item]}
               </button>

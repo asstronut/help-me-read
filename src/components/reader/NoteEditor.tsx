@@ -56,7 +56,7 @@ export function NoteEditor({ highlight, onSaved, onDeleted, onClose }: Props) {
       role="dialog"
       aria-label="Note"
       onSubmit={save}
-      className="fixed inset-x-0 bottom-0 z-50 flex flex-col gap-2 border-t border-black/10 bg-white p-3 text-sm text-black shadow-lg sm:inset-x-auto sm:right-4 sm:bottom-4 sm:w-80 sm:rounded-lg sm:border"
+      className="fixed inset-x-0 bottom-0 z-50 flex flex-col gap-2 border-t border-foreground/10 bg-background p-3 text-sm text-foreground shadow-lg sm:inset-x-auto sm:right-4 sm:bottom-4 sm:w-80 sm:rounded-lg sm:border"
     >
       <div role="group" aria-label="Colour" className="flex gap-2">
         {HIGHLIGHT_COLORS.map((c) => (
@@ -67,7 +67,7 @@ export function NoteEditor({ highlight, onSaved, onDeleted, onClose }: Props) {
             aria-pressed={c === color}
             onClick={() => setColor(c)}
             style={{ backgroundColor: HIGHLIGHT_FILLS[c] }}
-            className="size-6 rounded-full border border-black/20 aria-pressed:ring-2 aria-pressed:ring-black"
+            className="size-6 rounded-full border border-foreground/20 aria-pressed:ring-2 aria-pressed:ring-foreground"
           />
         ))}
       </div>
@@ -76,7 +76,7 @@ export function NoteEditor({ highlight, onSaved, onDeleted, onClose }: Props) {
         value={note}
         onChange={(e) => setNote(e.target.value)}
         rows={3}
-        className="rounded border border-black/20 p-2"
+        className="rounded border border-foreground/20 p-2"
       />
       {problem && (
         <p role="alert" className="text-red-600">
@@ -84,14 +84,14 @@ export function NoteEditor({ highlight, onSaved, onDeleted, onClose }: Props) {
         </p>
       )}
       <div className="flex justify-between gap-2">
-        <button type="button" onClick={remove} disabled={busy} className="rounded px-2 py-1 text-red-600 hover:bg-black/5">
+        <button type="button" onClick={remove} disabled={busy} className="rounded px-2 py-1 text-red-600 hover:bg-foreground/5">
           Delete
         </button>
         <div className="flex gap-2">
-          <button type="button" onClick={onClose} className="rounded px-2 py-1 hover:bg-black/5">
+          <button type="button" onClick={onClose} className="rounded px-2 py-1 hover:bg-foreground/5">
             Close
           </button>
-          <button type="submit" disabled={busy} className="rounded bg-black px-3 py-1 text-white">
+          <button type="submit" disabled={busy} className="rounded bg-foreground px-3 py-1 text-background">
             Save
           </button>
         </div>

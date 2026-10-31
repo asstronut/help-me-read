@@ -15,7 +15,7 @@ type Props = {
 /** One answer, labelled with the model that wrote it. */
 export function MessageView({ content, modelLabel, failed, children }: Props) {
   return (
-    <article className="flex flex-col gap-1 rounded-lg border border-black/10 p-3">
+    <article className="flex flex-col gap-1 rounded-lg border border-foreground/10 p-3">
       {modelLabel && <p className="text-xs opacity-60">{modelLabel}</p>}
       <div className="text-sm leading-relaxed break-words [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-1.5 [&_pre]:overflow-x-auto [&_ul]:list-disc [&_ul]:pl-5">
         <Markdown>{content}</Markdown>
