@@ -25,7 +25,8 @@ export async function GET(_req: Request, { params }: Ctx) {
     const { data: signed, error: signError } = await supabase.storage
       .from('books')
       .createSignedUrl(row.storage_path, SIGNED_URL_SECONDS);
-    if (signError) throw signError;
+    // The row exists but its file was never uploaded (or is gone).
+    if (signError) return Response.json({ message: 'Book file not found' }, { status: 404 });
     return Response.json({
       ...toBookItem(row),
       segmentCount: row.segment_count,

@@ -31,13 +31,19 @@ async function uploadBook(file: File): Promise<string | null> {
     signedUploadUrl: string;
   };
 
-  const put = await fetch(signedUploadUrl, {
-    method: 'PUT',
-    headers: { 'content-type': CONTENT_TYPES[check.format] },
-    body: file,
-  });
-  if (!put.ok) {
-    await fetch(`/api/books/${bookId}`, { method: 'DELETE' });
+  let uploaded = false;
+  try {
+    const put = await fetch(signedUploadUrl, {
+      method: 'PUT',
+      headers: { 'content-type': CONTENT_TYPES[check.format] },
+      body: file,
+    });
+    uploaded = put.ok;
+  } catch {
+    // a dropped connection is handled like any other failed upload
+  }
+  if (!uploaded) {
+    await fetch(`/api/books/${bookId}`, { method: 'DELETE' }).catch(() => undefined);
     return 'The upload failed. Please try again.';
   }
   return null;

@@ -96,3 +96,36 @@ test('the library has no horizontal scroll', async ({ page }) => {
   );
   expect(overflow).toBe(false);
 });
+
+test('a dropped upload leaves no orphan book behind', async ({ page }) => {
+  await page.route('**/storage/v1/object/upload/**', (route) => route.abort());
+  await page.getByLabel('Choose a book').setInputFiles(SAMPLE_PDF);
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'The upload failed. Please try again.' }),
+  ).toBeVisible();
+  await expect(page.getByRole('listitem')).toHaveCount(0);
+  const { books } = (await (await page.request.get('/api/books')).json()) as { books: unknown[] };
+  expect(books).toEqual([]);
+});
+
+test('a failed delete shows an error and keeps the row', async ({ page }) => {
+  await page.getByLabel('Choose a book').setInputFiles(SAMPLE_PDF);
+  const row = page.getByRole('listitem').filter({ hasText: 'Sample Book' });
+  await expect(row).toBeVisible();
+  await page.route('**/api/books/*', (route) =>
+    route.request().method() === 'DELETE' ? route.fulfill({ status: 500 }) : route.continue(),
+  );
+  await row.getByRole('button', { name: /Delete/ }).click();
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'Could not delete this book. Please try again.' }),
+  ).toBeVisible();
+  await expect(row).toBeVisible();
+});
+
+test('a failed library load shows an error', async ({ page }) => {
+  await page.route('**/api/books', (route) => route.fulfill({ status: 500 }));
+  await page.reload();
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'Could not load your library.' }),
+  ).toBeVisible();
+});

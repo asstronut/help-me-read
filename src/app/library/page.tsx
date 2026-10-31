@@ -6,10 +6,17 @@ import { UploadDropzone } from './upload-dropzone';
 
 export default function LibraryPage() {
   const [books, setBooks] = useState<BookItem[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const res = await fetch('/api/books');
-    if (res.ok) setBooks(((await res.json()) as { books: BookItem[] }).books);
+    try {
+      const res = await fetch('/api/books');
+      if (!res.ok) throw new Error(String(res.status));
+      setBooks(((await res.json()) as { books: BookItem[] }).books);
+      setError(null);
+    } catch {
+      setError('Could not load your library. Please refresh to try again.');
+    }
   }, []);
 
   useEffect(() => {
@@ -18,14 +25,25 @@ export default function LibraryPage() {
   }, [load]);
 
   async function remove(id: string) {
-    const res = await fetch(`/api/books/${id}`, { method: 'DELETE' });
-    if (res.ok) setBooks((current) => current?.filter((b) => b.id !== id) ?? null);
+    try {
+      const res = await fetch(`/api/books/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(String(res.status));
+      setBooks((current) => current?.filter((b) => b.id !== id) ?? null);
+      setError(null);
+    } catch {
+      setError('Could not delete this book. Please try again.');
+    }
   }
 
   return (
     <main className="mx-auto w-full max-w-2xl space-y-6 p-4 sm:p-6">
       <h1 className="text-xl font-semibold">Library</h1>
       <UploadDropzone onUploaded={load} />
+      {error && (
+        <p role="alert" className="text-sm text-red-600">
+          {error}
+        </p>
+      )}
       {books?.length === 0 && <p className="opacity-70">No books yet. Add your first one above.</p>}
       {books && books.length > 0 && (
         <ul className="divide-y divide-gray-300/50">

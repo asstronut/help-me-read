@@ -134,6 +134,12 @@ describe('books', () => {
     await admin.from('books').delete().eq('id', row!.id);
   });
 
+  test('a book whose file was never uploaded is a 404, not a server error', async () => {
+    const api = await signedInOwner();
+    const { bookId } = await (await createBook(api)).json();
+    expect((await api.get(`/api/books/${bookId}`)).status).toBe(404);
+  });
+
   test('unknown book is 404', async () => {
     const api = await signedInOwner();
     expect((await api.get('/api/books/00000000-0000-0000-0000-000000000000')).status).toBe(404);
