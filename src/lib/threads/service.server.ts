@@ -8,6 +8,7 @@ import { buildFirstUserMessage, buildSystemPrompt } from '@/lib/ai/prompts';
 import { getLanguageModel } from '@/lib/ai/registry.server';
 import { assertWithinCap } from '@/lib/ai/spend.server';
 import { buildContext } from '@/lib/context/build';
+import { SelectionSchema } from '@/lib/selection/schema';
 import type { Database } from '@/lib/supabase/database.types';
 import type { TestControls } from '@/lib/test-controls.server';
 import {
@@ -31,18 +32,6 @@ export const THREAD_NOT_FOUND = () => fail(404, 'Thread not found');
 
 // ---------- creating a thread ----------
 
-const RectSchema = z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() });
-const AnchorSchema = z.discriminatedUnion('format', [
-  z.object({ format: z.literal('pdf'), page: z.number().int().min(1), rects: z.array(RectSchema) }),
-  z.object({ format: z.literal('epub'), cfi: z.string().min(1) }),
-]);
-const SelectionSchema = z.object({
-  bookId: z.uuid(),
-  segmentSeq: z.number().int().min(0),
-  text: z.string().refine((t) => t.trim() !== ''),
-  prefix: z.string(),
-  anchor: AnchorSchema,
-});
 export const CreateThreadSchema = z.object({
   bookId: z.uuid(),
   action: z.enum(ACTIONS),

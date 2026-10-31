@@ -1,10 +1,16 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import type { SectionLoadDetail, View } from 'foliate-js/view.js';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type {
+  DrawAnnotationDetail,
+  SectionLoadDetail,
+  ShowAnnotationDetail,
+  View,
+} from 'foliate-js/view.js';
 import { captureEpubSelection } from '@/lib/selection/capture-epub';
 import { watchSelection } from '@/lib/selection/watch';
 import type { HighlightView, ReaderSelection } from '@/lib/types';
+import { HIGHLIGHT_FILLS, HIGHLIGHT_INKS } from './highlight-colors';
 import { FONT_SIZES, ReaderToolbar } from './ReaderToolbar';
 import type { SelectionBox } from './SelectionMenu';
 import { usePositionSaver } from './usePositionSaver';
@@ -15,6 +21,7 @@ type Props = {
   initialCfi: string | null;
   onSelection: (selection: ReaderSelection | null, box?: SelectionBox) => void;
   highlights: HighlightView[];
+  onHighlightTap: (highlight: HighlightView) => void;
 };
 
 const FONT_SIZE_KEY = 'hmr.fontSize';
@@ -40,7 +47,23 @@ function boxInViewport(range: Range): SelectionBox {
   return { top: r.top + dy, bottom: r.bottom + dy, left: r.left + dx, right: r.right + dx };
 }
 
-export default function EpubReader({ bookId, fileUrl, initialCfi, onSelection }: Props) {
+/** The book's EPUB highlights by CFI, the key foliate draws annotations under. */
+function byCfi(highlights: HighlightView[]): Map<string, HighlightView> {
+  const map = new Map<string, HighlightView>();
+  for (const h of highlights) if (h.anchor.format === 'epub') map.set(h.anchor.cfi, h);
+  return map;
+}
+
+const drawsDiffer = (a: HighlightView, b: HighlightView) => a.kind !== b.kind || a.color !== b.color;
+
+export default function EpubReader({
+  bookId,
+  fileUrl,
+  initialCfi,
+  onSelection,
+  highlights,
+  onHighlightTap,
+}: Props) {
   const [fontSize, setFontSize] = useState(readFontSize);
   const [error, setError] = useState(false);
   const { save, status } = usePositionSaver(bookId);
@@ -48,10 +71,34 @@ export default function EpubReader({ bookId, fileUrl, initialCfi, onSelection }:
   const viewRef = useRef<View | null>(null);
   const fontSizeRef = useRef(fontSize);
   const onSelectionRef = useRef(onSelection);
+  const onHighlightTapRef = useRef(onHighlightTap);
+  const highlightsRef = useRef(highlights);
+  // What the view has been asked to draw, by CFI.
+  const drawnRef = useRef(new Map<string, HighlightView>());
   useEffect(() => {
     fontSizeRef.current = fontSize;
     onSelectionRef.current = onSelection;
+    onHighlightTapRef.current = onHighlightTap;
+    highlightsRef.current = highlights;
   });
+
+  /** Brings the view's annotations in line with the current highlights. */
+  const syncAnnotations = useCallback((view: View) => {
+    const next = byCfi(highlightsRef.current);
+    const drawn = drawnRef.current;
+    drawnRef.current = next;
+    for (const value of drawn.keys()) {
+      if (!next.has(value)) view.deleteAnnotation({ value }).catch(() => undefined);
+    }
+    for (const [value, h] of next) {
+      const old = drawn.get(value);
+      if (!old || drawsDiffer(old, h)) view.addAnnotation({ value }).catch(() => undefined);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (viewRef.current) syncAnnotations(viewRef.current);
+  }, [highlights, syncAnnotations]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -60,7 +107,10 @@ export default function EpubReader({ bookId, fileUrl, initialCfi, onSelection }:
     let view: View | null = null;
     let unwatch: (() => void) | undefined;
     (async () => {
-      await import('foliate-js/view.js');
+      const [, { Overlayer }] = await Promise.all([
+        import('foliate-js/view.js'),
+        import('foliate-js/overlayer.js'),
+      ]);
       if (cancelled) return;
       view = document.createElement('foliate-view') as View;
       view.style.cssText = 'display:block;width:100%;height:100%';
@@ -75,6 +125,24 @@ export default function EpubReader({ bookId, fileUrl, initialCfi, onSelection }:
           onSelectionRef.current(selection, range ? boxInViewport(range) : undefined);
         });
       });
+      // Each shown section gets a fresh overlay: draw its highlights again.
+      view.addEventListener('create-overlay', (e) => {
+        const current = e.currentTarget as View;
+        for (const value of drawnRef.current.keys()) {
+          current.addAnnotation({ value }).catch(() => undefined);
+        }
+      });
+      view.addEventListener('draw-annotation', (e) => {
+        const { draw, annotation } = (e as CustomEvent<DrawAnnotationDetail>).detail;
+        const h = drawnRef.current.get(annotation.value);
+        if (!h) return;
+        if (h.kind === 'thread') draw(Overlayer.underline, { color: HIGHLIGHT_INKS[h.color], width: 2 });
+        else draw(Overlayer.highlight, { color: HIGHLIGHT_FILLS[h.color] });
+      });
+      view.addEventListener('show-annotation', (e) => {
+        const h = drawnRef.current.get((e as CustomEvent<ShowAnnotationDetail>).detail.value);
+        if (h) onHighlightTapRef.current(h);
+      });
       host.append(view);
       await view.open(fileUrl);
       if (cancelled) return;
@@ -82,15 +150,17 @@ export default function EpubReader({ bookId, fileUrl, initialCfi, onSelection }:
       view.renderer.setStyles(fontCss(fontSizeRef.current));
       await view.init({ lastLocation: initialCfi, showTextStart: true });
       viewRef.current = view;
+      syncAnnotations(view);
     })().catch(() => setError(true));
     return () => {
       cancelled = true;
       unwatch?.();
       viewRef.current = null;
+      drawnRef.current = new Map();
       view?.close();
       view?.remove();
     };
-  }, [bookId, fileUrl, initialCfi, save]);
+  }, [bookId, fileUrl, initialCfi, save, syncAnnotations]);
 
   function chooseFontSize(size: number) {
     setFontSize(size);

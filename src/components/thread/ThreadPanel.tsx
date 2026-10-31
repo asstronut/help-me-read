@@ -9,7 +9,11 @@ import type { Action, ContextScope, ReaderSelection } from '@/lib/types';
 import { MessageView } from './MessageView';
 import { ModelSwitcher } from './ModelSwitcher';
 
-type Props = { onClose: () => void } & (
+type Props = {
+  onClose: () => void;
+  /** A new thread (and its highlight) has been saved. */
+  onCreated?: () => void;
+} & (
   | { threadId: string; action?: never; selection?: never }
   | { threadId: null; action: Action; selection: ReaderSelection }
 );
@@ -105,7 +109,7 @@ function describe(error: APICallError): Problem {
 
 /** A thread beside the reader (a bottom sheet on a phone): answers stream in, with follow-ups, re-ask and retry. */
 export function ThreadPanel(props: Props) {
-  const { onClose } = props;
+  const { onClose, onCreated } = props;
   const [threadId, setThreadId] = useState(props.threadId);
   const [action, setAction] = useState<Action | null>(props.action ?? null);
   const [thread, setThread] = useState<ThreadMessage[]>([]);
@@ -197,6 +201,7 @@ export function ThreadPanel(props: Props) {
       return;
     }
     setThreadId(created.threadId);
+    onCreated?.();
     await send(created.threadId, question === null ? {} : { text: question }, question);
   }
 
