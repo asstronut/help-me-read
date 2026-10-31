@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from 'vitest';
 import { apiClient } from '../helpers/api-client';
-import { INTRUDER, OWNER, ensureUser } from '../helpers/users';
+import { INTRUDER, OWNER, ensureUser, sessionCookieHeader } from '../helpers/users';
 
 beforeAll(async () => {
   await ensureUser(OWNER.email, OWNER.password);
@@ -60,4 +60,23 @@ describe('private access', () => {
     expect((await api.post('/api/auth/logout')).status).toBe(200);
     expect((await api.get('/api/me')).status).toBe(401);
   });
+
+  test('a real session for another email is refused by the API and the proxy', async () => {
+    const cookie = await sessionCookieHeader(INTRUDER.email, INTRUDER.password);
+    const api = apiClient();
+    const me = await api.get('/api/me', { cookie });
+    expect(me.status).toBe(403);
+    const page = await api.get('/library', { cookie });
+    expect(page.status).toBe(307);
+    expect(new URL(page.headers.get('location')!, 'http://localhost').pathname).toBe('/login');
+  });
+
+  test.each(['/authors', '/login-history', '/apiary'])(
+    'page %s without a session redirects to /login',
+    async (path) => {
+      const res = await apiClient().get(path);
+      expect(res.status).toBe(307);
+      expect(new URL(res.headers.get('location')!, 'http://localhost').pathname).toBe('/login');
+    },
+  );
 });

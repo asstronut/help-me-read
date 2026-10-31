@@ -6,6 +6,10 @@ import type { Database } from '@/lib/supabase/database.types';
 // Page requests without an allowed session go to /login. API routes check the
 // session themselves (requireUser) and answer 401/403.
 export async function proxy(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+  if (pathname === '/login' || pathname.startsWith('/api/') || pathname.startsWith('/auth/')) {
+    return NextResponse.next();
+  }
   let res = NextResponse.next({ request: req });
   const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,5 +35,5 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!api|auth|login|_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon\\.ico).*)'],
 };

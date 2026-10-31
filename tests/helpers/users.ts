@@ -1,3 +1,4 @@
+import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 
 try {
@@ -31,4 +32,22 @@ export async function ensureUser(email: string, password: string): Promise<void>
   if (!existing) throw error;
   const { error: updateError } = await admin.auth.admin.updateUserById(existing.id, { password });
   if (updateError) throw updateError;
+}
+
+/** Signs in directly with Supabase (bypassing the app's login) and returns the Cookie header the app would read. */
+export async function sessionCookieHeader(email: string, password: string): Promise<string> {
+  const jar = new Map<string, string>();
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll: () => [...jar].map(([name, value]) => ({ name, value })),
+        setAll: (list) => list.forEach(({ name, value }) => jar.set(name, value)),
+      },
+    },
+  );
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  return [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
 }
