@@ -1,3 +1,4 @@
+import { aiMockEnabled } from '@/lib/test-mode';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAI } from '@ai-sdk/openai';
@@ -91,7 +92,7 @@ function createRegistry() {
 
 /** The language model for a registry id; with AI_MOCK=1, the mock model that honours the test controls. */
 export function getLanguageModel(modelId: string, controls: TestControls): LanguageModel {
-  if (process.env.AI_MOCK === '1') return mockModel(modelId, controls);
+  if (aiMockEnabled()) return mockModel(modelId, controls);
   const info = MODELS.find((m) => m.id === modelId);
   if (!info) throw new Error(`Unknown model ${modelId}`);
   registry ??= createRegistry();

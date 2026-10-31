@@ -1,3 +1,4 @@
+import { e2eHooksEnabled } from '@/lib/test-mode';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import { MenuPreview } from './MenuPreview';
@@ -11,7 +12,7 @@ async function Preview({ searchParams }: { searchParams: SearchParams }) {
 
 /** Test-only page: the selection menu for a selection of `?words=` words. */
 export default function TestMenuPage({ searchParams }: { searchParams: SearchParams }) {
-  if (process.env.NEXT_PUBLIC_E2E !== '1') notFound();
+  if (!e2eHooksEnabled()) notFound();
   return (
     <Suspense>
       <Preview searchParams={searchParams} />

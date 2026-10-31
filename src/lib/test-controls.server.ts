@@ -1,7 +1,9 @@
+import { aiMockEnabled } from '@/lib/test-mode';
+
 export type TestControls = { now: Date; failAfter: number | null };
 
 export function testControls(req: Request): TestControls {
-  if (process.env.AI_MOCK !== '1') return { now: new Date(), failAfter: null };
+  if (!aiMockEnabled()) return { now: new Date(), failAfter: null };
 
   const nowHeader = req.headers.get('x-test-now');
   const parsedNow = nowHeader ? new Date(nowHeader) : null;

@@ -53,6 +53,10 @@ describe('private access', () => {
     expect((await apiClient().get('/api/me')).status).toBe(401);
   });
 
+  test('without a session the mock prompt is not readable', async () => {
+    expect((await apiClient().get('/api/test/last-prompt')).status).toBe(401);
+  });
+
   test('logout ends the session', async () => {
     const api = apiClient();
     await api.login(OWNER.email, OWNER.password);

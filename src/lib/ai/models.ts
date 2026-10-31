@@ -1,3 +1,4 @@
+import { aiMockEnabled } from '@/lib/test-mode';
 import type { Action } from '@/lib/types';
 
 export type Provider = 'google' | 'anthropic' | 'openai' | 'openrouter';
@@ -106,7 +107,7 @@ export const DEFAULT_ACTION_MODELS: Record<Action, string> = {
 type Env = Record<string, string | undefined>;
 
 export function isProviderAvailable(provider: Provider, env: Env): boolean {
-  return env.AI_MOCK === '1' || Boolean(env[PROVIDER_ENV_KEYS[provider]]?.trim());
+  return aiMockEnabled(env) || Boolean(env[PROVIDER_ENV_KEYS[provider]]?.trim());
 }
 
 export function availableModels(env: Env): ModelInfo[] {

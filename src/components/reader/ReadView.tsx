@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ThreadPanel } from '@/components/thread/ThreadPanel';
+import { e2eHooksEnabled } from '@/lib/test-mode';
 import type {
   Action,
   Anchor,
@@ -129,7 +130,7 @@ export function ReadView({ bookId, threadId, at }: Props) {
   }, [notice]);
 
   useEffect(() => {
-    if (process.env.NEXT_PUBLIC_E2E === '1') window.__hmrSelection = current?.selection ?? null;
+    if (e2eHooksEnabled()) window.__hmrSelection = current?.selection ?? null;
   }, [current]);
 
   const onSelection = (selection: ReaderSelection | null, box?: SelectionBox) => {
