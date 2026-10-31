@@ -52,25 +52,49 @@ async function messageOf(res: Response, fallback: string): Promise<string> {
 
 type Created = { threadId: string } | { problem: string };
 
+/** Never rejects: any failure comes back as a problem to show. */
 async function createThread(
   action: Action,
   selection: ReaderSelection,
   scope: ContextScope,
 ): Promise<Created> {
-  const res = await fetch('/api/threads', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ bookId: selection.bookId, action, selection, scope }),
-  }).catch(() => null);
-  if (!res) return { problem: 'Could not start this thread.' };
-  if (!res.ok) return { problem: await messageOf(res, 'Could not start this thread.') };
-  return (await res.json()) as { threadId: string };
+  const problem = 'Could not start this thread.';
+  try {
+    const res = await fetch('/api/threads', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ bookId: selection.bookId, action, selection, scope }),
+    });
+    if (!res.ok) return { problem: await messageOf(res, problem) };
+    const body = (await res.json()) as { threadId?: unknown };
+    return typeof body.threadId === 'string' ? { threadId: body.threadId } : { problem };
+  } catch {
+    return { problem };
+  }
 }
 
-function describe(error: Error): Problem {
-  if (!APICallError.isInstance(error)) {
-    return { message: 'The answer stopped before it started.', overCap: false };
+type Stored = { action: Action; messages: ThreadMessage[] };
+
+/** The thread as the server saved it, or null when it cannot be loaded. Never rejects. */
+async function loadThread(threadId: string): Promise<Stored | null> {
+  try {
+    const res = await fetch(`/api/threads/${threadId}`);
+    if (!res.ok) return null;
+    const body = (await res.json()) as { thread?: { action?: unknown }; messages?: unknown };
+    const action = body.thread?.action;
+    if (typeof action !== 'string' || !(action in TITLES) || !Array.isArray(body.messages)) {
+      return null;
+    }
+    return { action: action as Action, messages: body.messages as ThreadMessage[] };
+  } catch {
+    return null;
   }
+}
+
+const LOAD_PROBLEM: Problem = { message: 'Could not load this thread.', overCap: false };
+
+/** A refused chat request, read from the server's `{ message }`. */
+function describe(error: APICallError): Problem {
   let message = 'The answer could not be fetched.';
   try {
     const body = JSON.parse(error.responseBody ?? '') as { message?: unknown };
@@ -107,14 +131,41 @@ export function ThreadPanel(props: Props) {
   const modelId = picked ?? fallbackModel;
   const busy = pending !== null || !loaded;
 
+  /** Replaces the panel's messages with what the server saved. */
+  async function reload(id: string) {
+    const stored = await loadThread(id);
+    if (!stored) {
+      setProblem(LOAD_PROBLEM);
+      return;
+    }
+    setAction(stored.action);
+    setThread(stored.messages);
+    setLoaded(true);
+  }
+
   /** Sends one turn and, once the stream settles, keeps what the server saved. */
   async function send(id: string, request: ChatRequest, question: string | null) {
     setProblem(null);
     setPending({ question });
+    try {
+      await settle(id, request, question);
+    } catch {
+      setProblem({ message: 'Something went wrong. Try again.', overCap: false });
+    } finally {
+      setMessages([]);
+      setPending(null);
+    }
+  }
+
+  async function settle(id: string, request: ChatRequest, question: string | null) {
     await chat.sendMessage({ text: question ?? '' }, { body: { threadId: id, ...request } });
     const answer = chat.lastMessage;
     const answerModel = answer?.role === 'assistant' ? answer.metadata?.modelId : undefined;
-    if (answer && answerModel) {
+    if (chat.error && APICallError.isInstance(chat.error)) {
+      // Refused before anything was saved (over the cap, unknown model, …): the question comes back.
+      setProblem(describe(chat.error));
+      if (question) setDraft(question);
+    } else if (answer && answerModel) {
       const status = chat.status === 'error' ? 'failed' : 'complete';
       setThread((prev) => [
         ...prev,
@@ -132,12 +183,9 @@ export function ThreadPanel(props: Props) {
         { id: answer.id, role: 'assistant', content: textOf(answer), modelId: answerModel, status },
       ]);
     } else {
-      // Refused before an answer started, so nothing was saved.
-      if (chat.error) setProblem(describe(chat.error));
-      if (question) setDraft(question);
+      // The stream broke before the answer started; the server saved the turn as failed.
+      await reload(id);
     }
-    setMessages([]);
-    setPending(null);
   }
 
   /** Asks for a new thread's first answer, or shows why the thread could not be created. */
@@ -161,16 +209,12 @@ export function ThreadPanel(props: Props) {
       .then((res) => (res.ok ? (res.json() as Promise<{ models: ModelOption[] }>) : { models: [] }))
       .then((body) => setModels(body.models), () => undefined);
     if (props.threadId !== null) {
-      fetch(`/api/threads/${props.threadId}`).then(async (res) => {
-        if (!res.ok) {
-          setProblem({ message: await messageOf(res, 'Could not open this thread.'), overCap: false });
-          return;
-        }
-        const body = (await res.json()) as { thread: { action: Action }; messages: ThreadMessage[] };
-        setAction(body.thread.action);
-        setThread(body.messages);
+      void loadThread(props.threadId).then((stored) => {
+        if (!stored) return setProblem(LOAD_PROBLEM);
+        setAction(stored.action);
+        setThread(stored.messages);
         setLoaded(true);
-      }, () => setProblem({ message: 'Could not open this thread.', overCap: false }));
+      });
     } else if (props.action !== 'ask') {
       void createThread(props.action, props.selection, 'page').then((c) => begin(c, null));
     }

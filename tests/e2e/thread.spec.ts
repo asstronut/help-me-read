@@ -227,3 +227,69 @@ test('the panel is a right side panel on desktop and a bottom sheet on a phone',
   await panel(page).getByRole('button', { name: 'Close' }).click();
   await expect(panel(page)).toHaveCount(0);
 });
+
+/**
+ * Lets the chat request reach the server with the mock failing at once, but drops the stream's
+ * `start` chunk, so the browser sees an error before any answer starts. The server has still
+ * saved an empty failed answer (and the question, for a follow-up).
+ */
+async function failBeforeStart(page: Page) {
+  let calls = 0;
+  await page.route('**/api/threads/*/chat', async (route) => {
+    calls += 1;
+    if (calls > 1) return route.continue();
+    const headers = { ...route.request().headers(), 'x-test-fail-after': '0' };
+    const response = await route.fetch({ headers });
+    const body = (await response.text())
+      .split('\n\n')
+      .filter((event) => !event.includes('"type":"start"'))
+      .join('\n\n');
+    return route.fulfill({ response, body });
+  });
+}
+
+test('an answer that fails before it starts shows the saved failed answer with Retry', async ({
+  page,
+}) => {
+  await openPdf(page);
+  await failBeforeStart(page);
+  await defineEphemeral(page);
+
+  await expect(answers(page)).toHaveCount(1);
+  await panel(page).getByRole('button', { name: 'Retry' }).click();
+  await expect(answers(page)).toHaveCount(2);
+  await expect(answers(page).nth(1)).toContainText('MOCK ANSWER');
+});
+
+test('a follow-up that fails before it starts keeps its question once', async ({ page }) => {
+  await openPdf(page);
+  const threadId = await defineEphemeral(page);
+  await expect(answers(page).first()).toContainText('MOCK ANSWER');
+
+  await failBeforeStart(page);
+  await panel(page).getByLabel('Follow-up').fill('More?');
+  await panel(page).getByRole('button', { name: 'Send' }).click();
+  await expect(answers(page)).toHaveCount(2);
+  await expect(panel(page).getByText('More?')).toHaveCount(1);
+  await expect(panel(page).getByLabel('Follow-up')).toHaveValue('');
+  await panel(page).getByRole('button', { name: 'Retry' }).click();
+  await expect(answers(page)).toHaveCount(3);
+  await expect(answers(page).nth(2)).toContainText('MOCK ANSWER');
+
+  const { messages } = (await (await page.request.get(`/api/threads/${threadId}`)).json()) as {
+    messages: { role: string; content: string }[];
+  };
+  expect(messages.filter((m) => m.role === 'user').map((m) => m.content)).toEqual(['More?']);
+});
+
+test('a thread that cannot be loaded says so', async ({ page }) => {
+  const bookId = await openPdf(page);
+  const threadId = await defineEphemeral(page);
+  await expect(answers(page).first()).toContainText('MOCK ANSWER');
+
+  await page.route(`**/api/threads/${threadId}`, (route) =>
+    route.fulfill({ status: 500, body: 'Internal Server Error' }),
+  );
+  await page.goto(`/read/${bookId}?thread=${threadId}`);
+  await expect(panel(page).getByText('Could not load this thread.')).toBeVisible();
+});
