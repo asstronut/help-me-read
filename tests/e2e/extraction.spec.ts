@@ -132,6 +132,10 @@ test('EPUB text in divs, beside nested blocks and around line breaks is kept', a
     const two = await segment(page, books[0].id, 1);
     expect(two.label).toBe('Two');
     expect(two.paragraphs).toEqual(['Different', 'Body.']);
+    // whitespace inside the label and heading is collapsed before comparing; "s" text survives
+    const three = await segment(page, books[0].id, 2);
+    expect(three.label).toBe('Chapter Three');
+    expect(three.paragraphs).toEqual(['Glass mess', 'ss']);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -148,12 +152,12 @@ async function mixedEpub(): Promise<Uint8Array> {
   );
   zip.file(
     'OEBPS/content.opf',
-    `<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="b"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="b">urn:uuid:1</dc:identifier><dc:title>Sample Book</dc:title><dc:language>en</dc:language></metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/><item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/><item id="c2" href="c2.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="c1"/><itemref idref="c2"/></spine></package>`,
+    `<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="b"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="b">urn:uuid:1</dc:identifier><dc:title>Sample Book</dc:title><dc:language>en</dc:language></metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/><item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/><item id="c2" href="c2.xhtml" media-type="application/xhtml+xml"/><item id="c3" href="c3.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="c1"/><itemref idref="c2"/><itemref idref="c3"/></spine></package>`,
   );
   zip.file(
     'OEBPS/nav.xhtml',
     page(
-      '<nav epub:type="toc"><ol><li><a href="c1.xhtml">Mixed</a></li><li><a href="c2.xhtml">Two</a></li></ol></nav>',
+      '<nav epub:type="toc"><ol><li><a href="c1.xhtml">Mixed</a></li><li><a href="c2.xhtml">Two</a></li><li><a href="c3.xhtml">Chapter\n  Three</a></li></ol></nav>',
     ),
   );
   zip.file(
@@ -163,5 +167,6 @@ async function mixedEpub(): Promise<Uint8Array> {
     ),
   );
   zip.file('OEBPS/c2.xhtml', page('<h1>Different</h1><p>Body.</p>'));
+  zip.file('OEBPS/c3.xhtml', page('<h1>Chapter   Three</h1><p>Glass mess</p><p>ss</p>'));
   return zip.generateAsync({ type: 'uint8array', mimeType: 'application/epub+zip' });
 }

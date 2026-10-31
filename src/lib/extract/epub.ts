@@ -17,7 +17,7 @@ const isElement = (node: Node): node is Element => node.nodeType === 1;
 const tagOf = (el: Element) => el.localName.toLowerCase();
 const isBlock = (el: Element) => BLOCK_TAGS.has(tagOf(el));
 const hasBlockInside = (el: Element) => [...el.querySelectorAll('*')].some(isBlock);
-const normalise = (text: string) => text.replace(/s+/g, ' ').trim();
+const normalise = (text: string) => text.replace(/\s+/g, ' ').trim();
 
 /** Text of a node with each <br> read as a space. */
 function textOf(node: Node): string {
@@ -59,7 +59,7 @@ function sectionLabels(toc: TocItem[] | null | undefined): Map<string, string> {
   const walk = (items: TocItem[]) => {
     for (const { label, href, subitems } of items) {
       const id = href?.split('#')[0];
-      if (id && label?.trim() && !labels.has(id)) labels.set(id, label.trim());
+      if (id && label && normalise(label) && !labels.has(id)) labels.set(id, normalise(label));
       if (subitems) walk(subitems);
     }
   };
