@@ -1,10 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/TextLayer.css';
+import { capturePdfSelection } from '@/lib/selection/capture-pdf';
+import { watchSelection } from '@/lib/selection/watch';
 import type { HighlightView, ReaderSelection } from '@/lib/types';
 import { ReaderToolbar } from './ReaderToolbar';
+import type { SelectionBox } from './SelectionMenu';
 import { usePositionSaver } from './usePositionSaver';
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -16,7 +19,7 @@ type Props = {
   bookId: string;
   fileUrl: string;
   initialPage: number;
-  onSelection: (selection: ReaderSelection | null) => void;
+  onSelection: (selection: ReaderSelection | null, box?: SelectionBox) => void;
   highlights: HighlightView[];
 };
 
@@ -24,17 +27,43 @@ const MAX_FIT_WIDTH = 800;
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 3;
 const ZOOM_STEP = 0.25;
+// Pages this far from the current one are drawn; the rest are sized placeholders.
+const RENDER_AROUND = 1;
 
 const clampZoom = (z: number) => Math.min(Math.max(z, MIN_ZOOM), MAX_ZOOM);
 
-export default function PdfReader({ bookId, fileUrl, initialPage }: Props) {
+/** The page taking up the most of the visible area. */
+function mostVisiblePage(container: HTMLElement): number | null {
+  const view = container.getBoundingClientRect();
+  let best: number | null = null;
+  let bestArea = 0;
+  for (const slot of container.querySelectorAll<HTMLElement>('[data-slot]')) {
+    const r = slot.getBoundingClientRect();
+    const visible = Math.min(r.bottom, view.bottom) - Math.max(r.top, view.top);
+    if (visible > bestArea) {
+      bestArea = visible;
+      best = Number(slot.dataset.slot);
+    }
+  }
+  return best;
+}
+
+export default function PdfReader({ bookId, fileUrl, initialPage, onSelection }: Props) {
   const [numPages, setNumPages] = useState(0);
+  // height / width of the first page, used to size pages that are not drawn
+  const [aspect, setAspect] = useState(0);
   const [page, setPage] = useState(initialPage);
   const [zoom, setZoom] = useState(1);
   const [containerWidth, setContainerWidth] = useState(0);
   const [error, setError] = useState(false);
   const { save, status } = usePositionSaver(bookId);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const pageRef = useRef(page);
+  const onSelectionRef = useRef(onSelection);
+  useEffect(() => {
+    pageRef.current = page;
+    onSelectionRef.current = onSelection;
+  });
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -48,12 +77,38 @@ export default function PdfReader({ bookId, fileUrl, initialPage }: Props) {
     if (numPages > 0) save({ page });
   }, [page, numPages, save]);
 
+  useEffect(
+    () =>
+      watchSelection(document, (range) => {
+        const selection = range && capturePdfSelection(range, bookId);
+        onSelectionRef.current(selection, range?.getBoundingClientRect());
+      }),
+    [bookId],
+  );
+
+  const scrollToPage = useCallback((target: number) => {
+    scrollRef.current?.querySelector(`[data-slot="${target}"]`)?.scrollIntoView({ block: 'start' });
+  }, []);
+
   function goTo(target: number) {
-    setPage(Math.min(Math.max(target, 1), Math.max(numPages, 1)));
-    scrollRef.current?.scrollTo({ top: 0 });
+    const next = Math.min(Math.max(target, 1), Math.max(numPages, 1));
+    setPage(next);
+    scrollToPage(next);
   }
 
-  const fitWidth = Math.min(containerWidth, MAX_FIT_WIDTH);
+  function onScroll() {
+    const el = scrollRef.current;
+    const visible = el && mostVisiblePage(el);
+    if (visible) setPage(visible);
+  }
+
+  const pageWidth = Math.min(containerWidth, MAX_FIT_WIDTH) * zoom;
+  const ready = numPages > 0 && aspect > 0 && pageWidth > 0;
+
+  // Keep the current page in view when the layout first appears and whenever page sizes change.
+  useLayoutEffect(() => {
+    if (ready) scrollToPage(pageRef.current);
+  }, [ready, pageWidth, scrollToPage]);
 
   return (
     <div className="flex h-dvh flex-col">
@@ -67,7 +122,7 @@ export default function PdfReader({ bookId, fileUrl, initialPage }: Props) {
         onFitWidth={() => setZoom(1)}
       />
       {status}
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
+      <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-auto">
         {error && (
           <p role="alert" className="p-4 text-sm text-red-600">
             Could not open this PDF.
@@ -77,15 +132,30 @@ export default function PdfReader({ bookId, fileUrl, initialPage }: Props) {
           file={fileUrl}
           loading={<p className="p-4 text-sm opacity-70">Loading…</p>}
           error=""
-          onLoadSuccess={(doc) => {
-            setNumPages(doc.numPages);
-            setPage((p) => Math.min(p, doc.numPages));
-          }}
+          onLoadSuccess={(doc) =>
+            doc.getPage(1).then((first) => {
+              const { width, height } = first.getViewport({ scale: 1 });
+              setAspect(height / width);
+              setNumPages(doc.numPages);
+              setPage((p) => Math.min(p, doc.numPages));
+            }, () => setError(true))
+          }
           onLoadError={() => setError(true)}
         >
-          {numPages > 0 && fitWidth > 0 && (
-            <div className="mx-auto w-fit">
-              <Page pageNumber={page} width={fitWidth * zoom} renderAnnotationLayer={false} />
+          {ready && (
+            <div className="mx-auto flex w-fit flex-col gap-2">
+              {Array.from({ length: numPages }, (_, i) => i + 1).map((n) => (
+                <div
+                  key={n}
+                  data-slot={n}
+                  aria-current={n === page ? 'page' : undefined}
+                  style={{ width: pageWidth, minHeight: pageWidth * aspect }}
+                >
+                  {Math.abs(n - page) <= RENDER_AROUND && (
+                    <Page pageNumber={n} width={pageWidth} renderAnnotationLayer={false} />
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </Document>

@@ -24,7 +24,7 @@ async function addSamplePdf(page: Page): Promise<string> {
 }
 
 const pageInput = (page: Page) => page.getByLabel('Page number');
-const currentPage = (page: Page) => page.locator('[data-page-number]');
+const currentPage = (page: Page) => page.locator('[aria-current="page"] [data-page-number]');
 
 test.beforeEach(async ({ page }) => {
   const { books } = (await (await page.request.get('/api/books')).json()) as {
@@ -40,7 +40,7 @@ test('the library title opens the reader on the first page', async ({ page }) =>
   await expect(page).toHaveURL(/\/read\/[0-9a-f-]+$/);
   await expect(currentPage(page)).toHaveAttribute('data-page-number', '1');
   await expect(pageInput(page)).toHaveValue('1');
-  await expect(page.locator('.react-pdf__Page__textContent')).toContainText('bank');
+  await expect(currentPage(page).locator('.react-pdf__Page__textContent')).toContainText('bank');
 });
 
 test('the toolbar moves between pages and the reader returns to the saved page', async ({
@@ -68,6 +68,16 @@ test('typing a page number jumps to it', async ({ page }) => {
   await pageInput(page).fill('3');
   await pageInput(page).press('Enter');
   await expect(currentPage(page)).toHaveAttribute('data-page-number', '3');
+  await expect(currentPage(page)).toBeInViewport({ ratio: 0.5 });
+});
+
+test('scrolling down the pages moves the current page', async ({ page }) => {
+  const id = await addSamplePdf(page);
+  await page.goto(`/read/${id}`);
+  await expect(currentPage(page)).toHaveAttribute('data-page-number', '1');
+  await page.locator('[data-page-number="2"]').evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await expect(pageInput(page)).toHaveValue('2');
+  await expect(currentPage(page)).toHaveAttribute('data-page-number', '2');
 });
 
 test('hiding the tab saves the position immediately', async ({ page }) => {
@@ -185,8 +195,8 @@ test('being signed out stops saving and says so', async ({ page }) => {
 test('zoom buttons change the page size and fit-to-width restores it', async ({ page }) => {
   const id = await addSamplePdf(page);
   await page.goto(`/read/${id}`);
-  const box = async () => (await page.locator('.react-pdf__Page').boundingBox())!.width;
-  await expect(page.locator('.react-pdf__Page canvas')).toBeVisible();
+  const box = async () => (await currentPage(page).boundingBox())!.width;
+  await expect(currentPage(page).locator('canvas')).toBeVisible();
   const fitted = await box();
 
   await page.getByRole('button', { name: 'Zoom in' }).click();
@@ -202,6 +212,6 @@ test('the page never scrolls sideways on a phone', async ({ page }, testInfo) =>
   test.skip(testInfo.project.name !== 'phone', 'phone layout only');
   const id = await addSamplePdf(page);
   await page.goto(`/read/${id}`);
-  await expect(page.locator('.react-pdf__Page canvas')).toBeVisible();
+  await expect(currentPage(page).locator('canvas')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
 });
