@@ -40,8 +40,59 @@ test('uploading a PDF shows it with its title and author, and it can be deleted'
   await expect(row).toBeVisible();
   await expect(row).toContainText('Test Author');
 
-  await row.getByRole('button', { name: /Delete/ }).click();
+  // Delete asks first; Cancel keeps the book.
+  await row.getByRole('button', { name: 'Delete Sample Book' }).click();
+  await expect(row).toContainText('Delete this book with its highlights, threads and notes?');
+  await row.getByRole('button', { name: 'Cancel' }).click();
+  await expect(row.getByRole('button', { name: 'Yes, delete' })).toHaveCount(0);
+  await page.reload();
+  await expect(row).toBeVisible();
+
+  await row.getByRole('button', { name: 'Delete Sample Book' }).click();
+  const deleted = page.waitForResponse((r) => r.request().method() === 'DELETE');
+  await row.getByRole('button', { name: 'Yes, delete' }).click();
+  expect((await deleted).status()).toBe(204);
   await expect(page.getByRole('listitem').filter({ hasText: 'Sample Book' })).toHaveCount(0);
+});
+
+test('a library refresh in flight when a book is deleted does not bring it back', async ({
+  page,
+}) => {
+  // Hold the list refresh that follows text preparation: its answer is read before the delete
+  // and delivered after it, as a slow response would be.
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  let markHeld!: () => void;
+  const held = new Promise<void>((resolve) => (markHeld = resolve));
+  await page.route('**/api/books', async (route) => {
+    if (route.request().method() !== 'GET') return route.continue();
+    const response = await route.fetch();
+    const { books } = (await response.json()) as { books: { extracted: boolean }[] };
+    if (books.some((b) => b.extracted)) {
+      markHeld();
+      await released;
+    }
+    await route.fulfill({ response });
+  });
+
+  await page.getByLabel('Choose a book').setInputFiles(SAMPLE_PDF);
+  const row = page.getByRole('listitem').filter({ hasText: 'Sample Book' });
+  await expect(row).toBeVisible();
+  await held;
+
+  await row.getByRole('button', { name: 'Delete Sample Book' }).click();
+  const deleted = page.waitForResponse((r) => r.request().method() === 'DELETE');
+  await row.getByRole('button', { name: 'Yes, delete' }).click();
+  expect((await deleted).status()).toBe(204);
+  await expect(row).toHaveCount(0);
+
+  const stale = page.waitForResponse(
+    (r) => r.url().endsWith('/api/books') && r.request().method() === 'GET',
+  );
+  release();
+  await stale;
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  await expect(row).toHaveCount(0, { timeout: 500 });
 });
 
 test('uploading an EPUB reads its title and author', async ({ page }) => {
@@ -115,7 +166,8 @@ test('a failed delete shows an error and keeps the row', async ({ page }) => {
   await page.route('**/api/books/*', (route) =>
     route.request().method() === 'DELETE' ? route.fulfill({ status: 500 }) : route.continue(),
   );
-  await row.getByRole('button', { name: /Delete/ }).click();
+  await row.getByRole('button', { name: 'Delete Sample Book' }).click();
+  await row.getByRole('button', { name: 'Yes, delete' }).click();
   await expect(
     page.getByRole('alert').filter({ hasText: 'Could not delete this book. Please try again.' }),
   ).toBeVisible();
