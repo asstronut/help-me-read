@@ -2,7 +2,18 @@
 
 import { useState } from 'react';
 
-type Props = {
+export const FONT_SIZES = [14, 16, 18, 20, 24] as const;
+
+type EpubProps = {
+  format: 'epub';
+  onPrev: () => void;
+  onNext: () => void;
+  fontSize: number;
+  onFontSize: (size: number) => void;
+};
+
+type PdfProps = {
+  format: 'pdf';
   page: number;
   numPages: number;
   onPage: (page: number) => void;
@@ -11,9 +22,41 @@ type Props = {
   onFitWidth: () => void;
 };
 
+type Props = PdfProps | EpubProps;
+
 const button = 'rounded px-2 py-1 text-sm hover:bg-gray-500/10 disabled:opacity-40';
 
-export function ReaderToolbar({ page, numPages, onPage, onZoomIn, onZoomOut, onFitWidth }: Props) {
+export function ReaderToolbar(props: Props) {
+  return props.format === 'epub' ? <EpubToolbar {...props} /> : <PdfToolbar {...props} />;
+}
+
+function EpubToolbar({ onPrev, onNext, fontSize, onFontSize }: EpubProps) {
+  return (
+    <div className="flex flex-wrap items-center gap-1 border-b border-gray-300/50 px-2 py-1">
+      <button type="button" aria-label="Previous page" onClick={onPrev} className={button}>
+        ‹
+      </button>
+      <button type="button" aria-label="Next page" onClick={onNext} className={button}>
+        ›
+      </button>
+      <span className="mx-1 h-4 w-px bg-gray-300/60" />
+      <select
+        aria-label="Font size"
+        value={fontSize}
+        onChange={(e) => onFontSize(Number(e.target.value))}
+        className="rounded border border-gray-300/60 bg-transparent px-1 py-0.5 text-sm"
+      >
+        {FONT_SIZES.map((size) => (
+          <option key={size} value={size}>
+            {size} px
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function PdfToolbar({ page, numPages, onPage, onZoomIn, onZoomOut, onFitWidth }: PdfProps) {
   const [draft, setDraft] = useState<string | null>(null);
 
   function commit() {

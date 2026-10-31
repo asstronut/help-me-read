@@ -6,4 +6,14 @@ declare module 'foliate-js/view.js' {
     toc?: TocItem[] | null;
   };
   export function makeBook(file: File): Promise<FoliateBook>;
+
+  export type RelocateDetail = { cfi: string };
+  export class View extends HTMLElement {
+    renderer: HTMLElement & { setStyles(styles: string): void };
+    open(book: string): Promise<void>;
+    init(options: { lastLocation: string | null; showTextStart?: boolean }): Promise<void>;
+    next(): Promise<void>;
+    prev(): Promise<void>;
+    close(): void;
+  }
 }

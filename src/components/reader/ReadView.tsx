@@ -6,6 +6,7 @@ import type { BookFormat, ReadingLocation } from '@/lib/types';
 
 // pdf.js needs the browser, so the reader is never rendered on the server.
 const PdfReader = dynamic(() => import('./PdfReader'), { ssr: false });
+const EpubReader = dynamic(() => import('./EpubReader'), { ssr: false });
 
 type Loaded = { format: BookFormat; fileUrl: string; location: ReadingLocation | null };
 
@@ -38,7 +39,15 @@ export function ReadView({ bookId }: { bookId: string }) {
   if (!loaded) return <p className="p-4 text-sm opacity-70">Loading…</p>;
 
   if (loaded.format === 'epub') {
-    return <p className="p-4 text-sm opacity-70">EPUB reading is coming soon.</p>;
+    return (
+      <EpubReader
+        bookId={bookId}
+        fileUrl={loaded.fileUrl}
+        initialCfi={loaded.location && 'cfi' in loaded.location ? loaded.location.cfi : null}
+        onSelection={() => undefined}
+        highlights={[]}
+      />
+    );
   }
   const initialPage = loaded.location && 'page' in loaded.location ? loaded.location.page : 1;
   return (
