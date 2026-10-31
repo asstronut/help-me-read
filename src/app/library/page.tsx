@@ -19,6 +19,16 @@ export default function LibraryPage() {
     }
   }, []);
 
+  // Refreshes the list after an upload or extraction without touching an error already shown.
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch('/api/books');
+      if (res.ok) setBooks(((await res.json()) as { books: BookItem[] }).books);
+    } catch {
+      // the next refresh will try again
+    }
+  }, []);
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch on mount
     void load();
@@ -38,7 +48,7 @@ export default function LibraryPage() {
   return (
     <main className="mx-auto w-full max-w-2xl space-y-6 p-4 sm:p-6">
       <h1 className="text-xl font-semibold">Library</h1>
-      <UploadDropzone onUploaded={load} />
+      <UploadDropzone onUploaded={refresh} />
       {error && (
         <p role="alert" className="text-sm text-red-600">
           {error}
@@ -53,6 +63,7 @@ export default function LibraryPage() {
                 <p className="break-words font-medium">{book.title}</p>
                 {book.author && <p className="break-words text-sm opacity-70">{book.author}</p>}
               </div>
+              {!book.extracted && <span className="text-xs opacity-60">Preparing text…</span>}
               <span className="text-xs uppercase opacity-60">{book.format}</span>
               <button
                 type="button"

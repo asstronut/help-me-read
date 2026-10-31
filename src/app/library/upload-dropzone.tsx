@@ -1,15 +1,20 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { extractAndSave } from '@/lib/books/extract-and-save';
 import { readMetadata } from '@/lib/books/metadata';
 import { UPLOAD_REASONS, sniffFormat, validateUpload } from '@/lib/books/validate-upload';
+import type { BookFormat } from '@/lib/types';
 
 const CONTENT_TYPES = {
   pdf: 'application/pdf',
   epub: 'application/epub+zip',
 } as const;
 
-async function uploadBook(file: File): Promise<string | null> {
+type Uploaded = { bookId: string; format: BookFormat };
+
+/** Returns the new book, or the reason it could not be added. */
+async function uploadBook(file: File): Promise<Uploaded | string> {
   const check = validateUpload(file);
   if (!check.ok) return check.reason;
   const head = new Uint8Array(await file.slice(0, 8).arrayBuffer());
@@ -46,7 +51,7 @@ async function uploadBook(file: File): Promise<string | null> {
     await fetch(`/api/books/${bookId}`, { method: 'DELETE' }).catch(() => undefined);
     return 'The upload failed. Please try again.';
   }
-  return null;
+  return { bookId, format: check.format };
 }
 
 export function UploadDropzone({ onUploaded }: { onUploaded: () => void }) {
@@ -62,9 +67,16 @@ export function UploadDropzone({ onUploaded }: { onUploaded: () => void }) {
     setError(null);
     setBusy(true);
     try {
-      const problem = await uploadBook(file);
-      if (problem) setError(problem);
-      else onUploaded();
+      const result = await uploadBook(file);
+      if (typeof result === 'string') {
+        setError(result);
+      } else {
+        onUploaded();
+        // runs on after the upload finishes; the library shows "Preparing text…" meanwhile
+        void extractAndSave(result.bookId, file, result.format)
+          .catch(() => setError("Could not prepare this book's text. Please try again."))
+          .finally(onUploaded);
+      }
     } catch {
       setError('Something went wrong. Please try again.');
     } finally {
