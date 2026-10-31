@@ -272,3 +272,13 @@ test('an EPUB prefix reads like the extracted paragraphs', async ({ page }) => {
   expect(prefix.endsWith('across the valley as evening ')).toBe(true);
   expect(prefix).not.toMatch(/\s\s|\n/);
 });
+
+test('an EPUB selection starting inside a word keeps the prefix glued to it', async ({ page }) => {
+  const id = await addBook(page, 'epub');
+  await page.goto(`/read/${id}`);
+  await selectInParagraph(await chapterFrame(page), 'P6', 'ridges');
+  await expect(menu(page)).toBeVisible();
+  const selection = (await currentSelection(page))!;
+  expect(selection.text).toBe('ridges');
+  expect(selection.prefix).toMatch(/P6 past old stone b$/);
+});

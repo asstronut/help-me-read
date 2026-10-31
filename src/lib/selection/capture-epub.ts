@@ -1,4 +1,4 @@
-import { BLOCK_TAGS } from '@/lib/extract/epub';
+import { BLOCK_TAGS } from '@/lib/html-tags';
 import { PREFIX_CHARS, type ReaderSelection } from '@/lib/types';
 import { plainText } from './plain-text';
 
