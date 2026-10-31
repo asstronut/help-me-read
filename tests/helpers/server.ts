@@ -33,7 +33,7 @@ export async function setup(): Promise<void> {
   server = spawn(`npx next dev -p ${PORT}`, {
     shell: true,
     stdio: 'ignore',
-    env: { ...process.env, AI_MOCK: '1', NEXT_PUBLIC_E2E: '1' },
+    env: { ...process.env, NODE_ENV: 'development', AI_MOCK: '1', NEXT_PUBLIC_E2E: '1' },
   });
   await waitForHealth(120_000);
 }
