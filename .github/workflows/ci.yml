@@ -31,3 +31,6 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run test:api
       - run: npm run e2e
+      - name: Show Supabase auth logs on failure
+        if: failure()
+        run: docker logs --tail 80 supabase_auth_help-me-read 2>&1 | cut -c1-400
