@@ -33,6 +33,8 @@ export async function setup(): Promise<void> {
   server = spawn(`npx next dev -p ${PORT}`, {
     shell: true,
     stdio: 'ignore',
+    // Own process group on POSIX, so teardown can stop `next` and not just the shell.
+    detached: process.platform !== 'win32',
     env: { ...process.env, NODE_ENV: 'development', AI_MOCK: '1', NEXT_PUBLIC_E2E: '1' },
   });
   await waitForHealth(120_000);
@@ -43,6 +45,6 @@ export async function teardown(): Promise<void> {
   if (process.platform === 'win32') {
     spawnSync('taskkill', ['/pid', String(server.pid), '/T', '/F']);
   } else {
-    server.kill('SIGTERM');
+    process.kill(-server.pid, 'SIGTERM');
   }
 }
