@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { BookItem } from '@/lib/books/book-item';
 import { extractAndSave } from '@/lib/books/extract-and-save';
@@ -99,7 +100,7 @@ export default function LibraryPage() {
           {books.map((book) => (
             <li key={book.id} className="flex items-center gap-3 py-3">
               <div className="min-w-0 flex-1">
-                <p className="break-words font-medium">{book.title}</p>
+                <Link href={`/read/${book.id}`} className="break-words font-medium hover:underline">{book.title}</Link>
                 {book.author && <p className="break-words text-sm opacity-70">{book.author}</p>}
               </div>
               {!book.extracted &&

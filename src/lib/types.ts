@@ -29,3 +29,12 @@ export const HIGHLIGHT_COLORS: readonly HighlightColor[] = ['yellow', 'green', '
 export const THEMES: readonly Theme[] = ['light', 'dark', 'sepia'];
 
 export const estimateTokens = (chars: number): number => Math.ceil(chars / 4);
+
+export type HighlightView = {
+  id: string;
+  kind: 'note' | 'thread';
+  color: HighlightColor;
+  anchor: Anchor;
+  threadId: string | null;
+  note: string | null;
+};
