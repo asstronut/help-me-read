@@ -125,7 +125,7 @@ test('define answers, takes a follow-up, re-asks with another model and reopens'
   await expect(answers(page).nth(1)).toContainText('MOCK ANSWER');
 
   const switcher = panel(page).getByLabel('Model');
-  await expect(switcher.locator('option', { hasText: 'Gemini 3.1 Pro' })).toContainText('not tested');
+  await expect(switcher.locator('option', { hasText: 'GPT-6 Luna' })).toContainText('not tested');
   await expect(switcher.locator('option', { hasText: 'Claude Haiku 5.5' })).not.toContainText(
     'not tested',
   );
