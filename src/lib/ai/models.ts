@@ -36,7 +36,7 @@ export const MODELS: ModelInfo[] = [
     label: 'Gemini 3.1 Pro',
     inputUsdPerMTok: 2,
     outputUsdPerMTok: 12,
-    tested: false,
+    tested: true,
   },
   {
     id: 'claude-haiku-5-5',
