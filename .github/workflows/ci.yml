@@ -1,0 +1,46 @@
+name: ci
+# Branch pushes run through their pull request, so each PR commit runs once.
+on:
+  push:
+    branches: [master]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      ALLOWED_EMAIL: owner@test.local
+      AI_MOCK: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - name: Production build
+        # The build only needs the public Supabase settings to exist; it calls nothing.
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: build-placeholder
+        # Remove the production output so the tests' dev server starts clean.
+        run: npm run build && rm -rf .next
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.122.0
+      # Only the services the tests use: fewer image pulls, less exposure to registry limits.
+      - run: supabase start -x realtime,imgproxy,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+      - name: Write .env.local from the local stack
+        run: |
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$(supabase status -o env | grep '^API_URL=' | cut -d= -f2- | tr -d '\"')"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$(supabase status -o env | grep '^ANON_KEY=' | cut -d= -f2- | tr -d '\"')"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$(supabase status -o env | grep '^SERVICE_ROLE_KEY=' | cut -d= -f2- | tr -d '\"')"
+          } >> .env.local
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:api
+      - run: npm run e2e
+      - name: Show Supabase auth logs on failure
+        if: failure()
+        run: docker logs --tail 80 supabase_auth_help-me-read 2>&1 | cut -c1-400
