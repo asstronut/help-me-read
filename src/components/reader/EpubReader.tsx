@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   DrawAnnotationDetail,
+  RelocateDetail,
   SectionLoadDetail,
   ShowAnnotationDetail,
   View,
@@ -14,6 +15,7 @@ import { watchSelection } from '@/lib/selection/watch';
 import type { HighlightView, ReaderSelection } from '@/lib/types';
 import { HIGHLIGHT_HEX, HIGHLIGHT_INKS } from './highlight-colors';
 import { PageTurnEdge } from './PageTurnEdge';
+import { ProgressFooter } from './ProgressFooter';
 import { ReaderTopBar } from './ReaderTopBar';
 import { FONT_SIZES, ReadingSettings } from './ReadingSettings';
 import type { SelectionBox } from './SelectionMenu';
@@ -90,6 +92,7 @@ export default function EpubReader({
 }: Props) {
   const [fontSize, setFontSize] = useState(readFontSize);
   const [error, setError] = useState(false);
+  const [fraction, setFraction] = useState<number | null>(null);
   const { save, status } = usePositionSaver(bookId);
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<View | null>(null);
@@ -148,7 +151,11 @@ export default function EpubReader({
       if (cancelled) return;
       view = document.createElement('foliate-view') as View;
       view.style.cssText = 'display:block;width:100%;height:100%';
-      view.addEventListener('relocate', (e) => save({ cfi: (e as CustomEvent<{ cfi: string }>).detail.cfi }));
+      view.addEventListener('relocate', (e) => {
+        const { cfi, fraction } = (e as CustomEvent<RelocateDetail>).detail;
+        save({ cfi });
+        if (typeof fraction === 'number') setFraction(fraction);
+      });
       view.addEventListener('load', (e) => {
         const { doc, index } = (e as CustomEvent<SectionLoadDetail>).detail;
         const current = e.currentTarget as View;
@@ -248,6 +255,7 @@ export default function EpubReader({
         />
         <PageTurnEdge direction="next" onClick={() => turnPage(1)} />
       </div>
+      <ProgressFooter fraction={fraction} />
     </div>
   );
 }

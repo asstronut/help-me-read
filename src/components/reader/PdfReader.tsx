@@ -10,6 +10,7 @@ import { watchSelection } from '@/lib/selection/watch';
 import type { HighlightView, ReaderSelection } from '@/lib/types';
 import { PdfHighlightLayer, highlightsAt } from './PdfHighlightLayer';
 import { PdfPageBar } from './PdfPageBar';
+import { ProgressFooter } from './ProgressFooter';
 import { ReaderTopBar } from './ReaderTopBar';
 import type { SelectionBox } from './SelectionMenu';
 import { usePositionSaver } from './usePositionSaver';
@@ -219,6 +220,7 @@ export default function PdfReader({
           className="absolute bottom-3 left-1/2 -translate-x-1/2 sm:bottom-5"
         />
       </div>
+      <ProgressFooter fraction={numPages > 0 ? page / numPages : null} />
     </div>
   );
 }

@@ -95,6 +95,16 @@ test('the keyboard turns pages, but not while typing a page number', async ({ pa
   await expect(currentPage(page)).toHaveAttribute('data-page-number', '2');
 });
 
+test('the progress footer shows the page as a share of the page count', async ({ page }) => {
+  const id = await addSamplePdf(page);
+  await page.goto(`/read/${id}`);
+  const progress = page.getByRole('progressbar', { name: 'Reading progress' });
+  await expect(progress).toHaveAttribute('aria-valuenow', '33');
+  await expect(page.getByText('33%', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Next page' }).click();
+  await expect(progress).toHaveAttribute('aria-valuenow', '67');
+});
+
 test('scrolling down the pages moves the current page', async ({ page }) => {
   const id = await addSamplePdf(page);
   await page.goto(`/read/${id}`);

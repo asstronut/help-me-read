@@ -104,6 +104,18 @@ test('the keyboard turns pages, also once the text has been clicked', async ({ p
   await expect.poll(() => visibleMarkers(page)).not.toContain('P1');
 });
 
+test('the progress footer follows the position in the book', async ({ page }) => {
+  const id = await addSampleEpub(page);
+  await page.goto(`/read/${id}`);
+  const progress = page.getByRole('progressbar', { name: 'Reading progress' });
+  const percent = async () => Number(await progress.getAttribute('aria-valuenow'));
+  await expect.poll(percent).toBeGreaterThan(0);
+  const first = await percent();
+  await page.getByRole('button', { name: 'Next page' }).click();
+  await expect.poll(percent).toBeGreaterThan(first);
+  await expect(page.getByText(`${await percent()}%`, { exact: true })).toBeVisible();
+});
+
 test('the font size choice applies to the text and survives a reload', async ({ page }) => {
   const id = await addSampleEpub(page);
   await page.goto(`/read/${id}`);
