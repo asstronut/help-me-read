@@ -39,7 +39,9 @@ async function paragraph(page: Page) {
       return {
         family: style.fontFamily,
         lineHeight: Math.round((parseFloat(style.lineHeight) / parseFloat(style.fontSize)) * 100) / 100,
-        width: Math.round(p.getBoundingClientRect().width),
+        // The first line box's width: a paragraph that runs onto the next page has a bounding box
+        // spanning both pages' columns.
+        width: Math.round(p.getClientRects()[0].width),
         background: getComputedStyle(document.body).backgroundColor,
       };
     });
