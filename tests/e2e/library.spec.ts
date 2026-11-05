@@ -29,6 +29,12 @@ function bookRequests(page: import('@playwright/test').Page): string[] {
   page.on('request', (r) => urls.push(r.url()));
   return urls;
 }
+/** Delete sits in the ⋯ menu under the book's cover. */
+async function askDelete(row: import('@playwright/test').Locator) {
+  await row.getByRole('button', { name: 'Options for Sample Book' }).click();
+  await row.getByRole('button', { name: 'Delete Sample Book' }).click();
+}
+
 const touchesBooksOrStorage = (urls: string[]) =>
   urls.filter((u) => u.includes('/api/books') || u.includes('/storage/'));
 
@@ -41,14 +47,14 @@ test('uploading a PDF shows it with its title and author, and it can be deleted'
   await expect(row).toContainText('Test Author');
 
   // Delete asks first; Cancel keeps the book.
-  await row.getByRole('button', { name: 'Delete Sample Book' }).click();
+  await askDelete(row);
   await expect(row).toContainText('Delete this book with its highlights, threads and notes?');
   await row.getByRole('button', { name: 'Cancel' }).click();
   await expect(row.getByRole('button', { name: 'Yes, delete' })).toHaveCount(0);
   await page.reload();
   await expect(row).toBeVisible();
 
-  await row.getByRole('button', { name: 'Delete Sample Book' }).click();
+  await askDelete(row);
   const deleted = page.waitForResponse((r) => r.request().method() === 'DELETE');
   await row.getByRole('button', { name: 'Yes, delete' }).click();
   expect((await deleted).status()).toBe(204);
@@ -80,7 +86,7 @@ test('a library refresh in flight when a book is deleted does not bring it back'
   await expect(row).toBeVisible();
   await held;
 
-  await row.getByRole('button', { name: 'Delete Sample Book' }).click();
+  await askDelete(row);
   const deleted = page.waitForResponse((r) => r.request().method() === 'DELETE');
   await row.getByRole('button', { name: 'Yes, delete' }).click();
   expect((await deleted).status()).toBe(204);
@@ -166,7 +172,7 @@ test('a failed delete shows an error and keeps the row', async ({ page }) => {
   await page.route('**/api/books/*', (route) =>
     route.request().method() === 'DELETE' ? route.fulfill({ status: 500 }) : route.continue(),
   );
-  await row.getByRole('button', { name: 'Delete Sample Book' }).click();
+  await askDelete(row);
   await row.getByRole('button', { name: 'Yes, delete' }).click();
   await expect(
     page.getByRole('alert').filter({ hasText: 'Could not delete this book. Please try again.' }),
@@ -180,4 +186,51 @@ test('a failed library load shows an error', async ({ page }) => {
   await expect(
     page.getByRole('alert').filter({ hasText: 'Could not load your library.' }),
   ).toBeVisible();
+});
+
+test('a book not opened yet shows its format and "New", with no Continue reading', async ({ page }) => {
+  await page.getByLabel('Choose a book').setInputFiles(SAMPLE_PDF);
+  const row = page.getByRole('listitem').filter({ hasText: 'Sample Book' });
+  await expect(row).toContainText('PDF · New', { timeout: 30_000 });
+  await expect(page.getByRole('heading', { name: 'Continue reading' })).toHaveCount(0);
+});
+
+test('the reading progress saved in the reader shows in the library', async ({ page }) => {
+  await page.getByLabel('Choose a book').setInputFiles(SAMPLE_PDF);
+  const row = page.getByRole('listitem').filter({ hasText: 'Sample Book' });
+  await expect(row).toContainText('PDF · New', { timeout: 30_000 });
+
+  await row.getByRole('link', { name: 'Sample Book' }).click();
+  await expect(page.getByLabel('Page number')).toHaveValue('1');
+  const saved = page.waitForRequest(
+    (r) => r.method() === 'PUT' && r.url().endsWith('/position') && r.postDataJSON().page === 2,
+  );
+  await page.getByRole('button', { name: 'Next page' }).click();
+  const { progress } = (await saved).postDataJSON() as { progress: number };
+  const shown = await page.getByRole('progressbar', { name: 'Reading progress' }).getAttribute('aria-valuenow');
+  expect(Math.round(progress * 100)).toBe(Number(shown));
+  expect(progress).toBeGreaterThan(0);
+
+  await page.goto('/library');
+  await expect(row).toContainText(`PDF · ${shown}%`);
+  const continuing = page.getByRole('region', { name: 'Continue reading' });
+  await expect(continuing).toContainText('Sample Book');
+  await expect(continuing.getByRole('progressbar', { name: 'Reading progress' })).toHaveAttribute(
+    'aria-valuenow',
+    shown!,
+  );
+  await continuing.getByRole('link', { name: 'Continue' }).click();
+  await expect(page.getByLabel('Page number')).toHaveValue('2');
+});
+
+test('the ⋯ menu closes with Escape and gives focus back', async ({ page }) => {
+  await page.getByLabel('Choose a book').setInputFiles(SAMPLE_PDF);
+  const row = page.getByRole('listitem').filter({ hasText: 'Sample Book' });
+  const options = row.getByRole('button', { name: 'Options for Sample Book' });
+  await options.click();
+  await expect(options).toHaveAttribute('aria-expanded', 'true');
+  await expect(row.getByRole('button', { name: 'Delete Sample Book' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(row.getByRole('button', { name: 'Delete Sample Book' })).toHaveCount(0);
+  await expect(options).toBeFocused();
 });

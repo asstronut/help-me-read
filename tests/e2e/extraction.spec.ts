@@ -94,6 +94,8 @@ test('a failed text save shows a retry that finishes the job', async ({ page }) 
 
   await page.unroute('**/api/books/*/segments');
   await row.getByRole('button', { name: 'Retry' }).click();
+  // Retry sits on the cover but outside its link: it does not open the book.
+  await expect(page).toHaveURL(/\/library$/);
   await expect(row.getByText("Couldn't prepare text")).toHaveCount(0);
   await expect(row.getByText('Preparing text…')).toHaveCount(0, { timeout: 30_000 });
   const { books } = (await (await page.request.get('/api/books')).json()) as {
