@@ -12,12 +12,15 @@ import { watchTaps } from '@/lib/selection/tap';
 import { watchSelection } from '@/lib/selection/watch';
 import type { HighlightView, ReaderSelection } from '@/lib/types';
 import { HIGHLIGHT_HEX, HIGHLIGHT_INKS } from './highlight-colors';
-import { FONT_SIZES, ReaderToolbar } from './ReaderToolbar';
+import { ReaderToolbar } from './ReaderToolbar';
+import { ReaderTopBar } from './ReaderTopBar';
+import { FONT_SIZES, ReadingSettings } from './ReadingSettings';
 import type { SelectionBox } from './SelectionMenu';
 import { usePositionSaver } from './usePositionSaver';
 
 type Props = {
   bookId: string;
+  title: string;
   fileUrl: string;
   initialCfi: string | null;
   onSelection: (selection: ReaderSelection | null, box?: SelectionBox) => void;
@@ -77,6 +80,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 
 export default function EpubReader({
   bookId,
+  title,
   fileUrl,
   initialCfi,
   onSelection,
@@ -214,12 +218,13 @@ export default function EpubReader({
 
   return (
     <div className="flex h-dvh flex-col">
+      <ReaderTopBar title={title}>
+        <ReadingSettings fontSize={fontSize} onFontSize={chooseFontSize} />
+      </ReaderTopBar>
       <ReaderToolbar
         format="epub"
         onPrev={() => void viewRef.current?.prev()}
         onNext={() => void viewRef.current?.next()}
-        fontSize={fontSize}
-        onFontSize={chooseFontSize}
       />
       {status}
       {error && (

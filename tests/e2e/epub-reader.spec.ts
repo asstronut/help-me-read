@@ -88,6 +88,7 @@ test('the font size choice applies to the text and survives a reload', async ({ 
   await page.goto(`/read/${id}`);
   await expect.poll(() => paragraphFontSize(page)).toBe('18px');
 
+  await page.getByRole('button', { name: 'Reading settings' }).click();
   await page.getByLabel('Font size').selectOption('24');
   await expect.poll(() => paragraphFontSize(page)).toBe('24px');
 

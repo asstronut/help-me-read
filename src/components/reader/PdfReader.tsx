@@ -9,6 +9,7 @@ import { watchSelection } from '@/lib/selection/watch';
 import type { HighlightView, ReaderSelection } from '@/lib/types';
 import { PdfHighlightLayer, highlightsAt } from './PdfHighlightLayer';
 import { ReaderToolbar } from './ReaderToolbar';
+import { ReaderTopBar } from './ReaderTopBar';
 import type { SelectionBox } from './SelectionMenu';
 import { usePositionSaver } from './usePositionSaver';
 
@@ -19,6 +20,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 
 type Props = {
   bookId: string;
+  title: string;
   fileUrl: string;
   initialPage: number;
   onSelection: (selection: ReaderSelection | null, box?: SelectionBox) => void;
@@ -56,6 +58,7 @@ const onPdfPage = (h: HighlightView, page: number) => h.anchor.format === 'pdf' 
 
 export default function PdfReader({
   bookId,
+  title,
   fileUrl,
   initialPage,
   onSelection,
@@ -149,6 +152,7 @@ export default function PdfReader({
 
   return (
     <div className="flex h-dvh flex-col">
+      <ReaderTopBar title={title} />
       <ReaderToolbar
         format="pdf"
         page={page}
