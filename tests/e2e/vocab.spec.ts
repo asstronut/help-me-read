@@ -95,7 +95,7 @@ test('Save to vocab saves a word that the vocab page can search, jump to, export
   // The book was left on page 3, so landing on page 1 shows the jump used the entry's anchor.
   const saved = await page.request.put(`/api/books/${bookId}/position`, { data: { page: 3 } });
   expect(saved.status()).toBe(204);
-  await row.getByRole('link', { name: 'Jump' }).click();
+  await row.getByRole('link', { name: 'Open in book' }).click();
   await expect(page).toHaveURL(new RegExp(`/read/${bookId}\\?at=`));
   await expect(textLayer(page, 1)).toContainText('steep');
   await expect(currentPage(page)).toHaveAttribute('data-page-number', '1');
