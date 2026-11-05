@@ -89,3 +89,10 @@ export const MoreIcon = (props: IconProps) => (
     <circle cx="19" cy="12" r="1.6" />
   </Icon>
 );
+
+/** An arrow pointing up: send. */
+export const ArrowUpIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <path d="M12 19V5M6 11l6-6 6 6" />
+  </Icon>
+);

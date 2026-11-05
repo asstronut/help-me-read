@@ -5,6 +5,9 @@ import { APICallError, DefaultChatTransport, type UIMessage } from 'ai';
 import Link from 'next/link';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { ModelInfo } from '@/lib/ai/models';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
+import { ArrowUpIcon, CloseIcon, RefreshIcon } from '@/components/ui/icons';
 import type { Action, ContextScope, ReaderSelection } from '@/lib/types';
 import { MessageView } from './MessageView';
 import { ModelSwitcher } from './ModelSwitcher';
@@ -81,7 +84,13 @@ async function createThread(
   }
 }
 
-type Stored = { action: Action; highlightId: string; messages: ThreadMessage[] };
+type Stored = {
+  action: Action;
+  scope: ContextScope;
+  highlightId: string;
+  quote: string;
+  messages: ThreadMessage[];
+};
 
 /** The thread as the server saved it, or null when it cannot be loaded. Never rejects. */
 async function loadThread(threadId: string): Promise<Stored | null> {
@@ -89,11 +98,10 @@ async function loadThread(threadId: string): Promise<Stored | null> {
     const res = await fetch(`/api/threads/${threadId}`);
     if (!res.ok) return null;
     const body = (await res.json()) as {
-      thread?: { action?: unknown; highlightId?: unknown };
+      thread?: { action?: unknown; scope?: unknown; highlightId?: unknown; quote?: unknown };
       messages?: unknown;
     };
-    const action = body.thread?.action;
-    const highlightId = body.thread?.highlightId;
+    const { action, scope, highlightId, quote } = body.thread ?? {};
     if (
       typeof action !== 'string' ||
       !(action in TITLES) ||
@@ -102,7 +110,13 @@ async function loadThread(threadId: string): Promise<Stored | null> {
     ) {
       return null;
     }
-    return { action: action as Action, highlightId, messages: body.messages as ThreadMessage[] };
+    return {
+      action: action as Action,
+      scope: scope === 'book' ? 'book' : 'page',
+      highlightId,
+      quote: typeof quote === 'string' ? quote : '',
+      messages: body.messages as ThreadMessage[],
+    };
   } catch {
     return null;
   }
@@ -138,6 +152,10 @@ export function ThreadPanel(props: Props) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [action, setAction] = useState<Action | null>(props.action ?? null);
+  /** The selected text the thread is about. */
+  const [quote, setQuote] = useState(props.selection?.text ?? '');
+  /** How much of the book the thread's answers were given: the page, or the whole book. */
+  const [scope, setScope] = useState<ContextScope>('page');
   const [thread, setThread] = useState<ThreadMessage[]>([]);
   /** False until a reopened thread's messages have loaded. */
   const [loaded, setLoaded] = useState(props.threadId === null);
@@ -168,7 +186,14 @@ export function ThreadPanel(props: Props) {
       setProblem(LOAD_PROBLEM);
       return;
     }
+    keep(stored);
+  }
+
+  /** Shows a thread as the server saved it. */
+  function keep(stored: Stored) {
     setAction(stored.action);
+    setScope(stored.scope);
+    setQuote(stored.quote);
     setHighlightId(stored.highlightId);
     setThread(stored.messages);
     setLoaded(true);
@@ -243,11 +268,8 @@ export function ThreadPanel(props: Props) {
       .then((body) => setModels(body.models), () => undefined);
     if (props.threadId !== null) {
       void loadThread(props.threadId).then((stored) => {
-        if (!stored) return setProblem(LOAD_PROBLEM);
-        setAction(stored.action);
-        setHighlightId(stored.highlightId);
-        setThread(stored.messages);
-        setLoaded(true);
+        if (stored) keep(stored);
+        else setProblem(LOAD_PROBLEM);
       });
     } else if (props.action !== 'ask') {
       void createThread(props.action, props.selection, 'page').then((c) => begin(c, null));
@@ -264,9 +286,9 @@ export function ThreadPanel(props: Props) {
     setDraft('');
     setProblem(null);
     setPending({ question });
-    void createThread(props.action, props.selection, wholeBook ? 'book' : 'page').then((c) =>
-      begin(c, question),
-    );
+    const chosen: ContextScope = wholeBook ? 'book' : 'page';
+    setScope(chosen);
+    void createThread(props.action, props.selection, chosen).then((c) => begin(c, question));
   }
 
   function onFollowUp(e: FormEvent) {
@@ -302,54 +324,46 @@ export function ThreadPanel(props: Props) {
   return (
     <aside
       aria-label="Thread"
-      className="fixed inset-x-0 bottom-0 z-40 flex h-[70dvh] flex-col border-t border-foreground/10 bg-background text-foreground shadow-lg md:inset-x-auto md:top-0 md:right-0 md:h-dvh md:w-[420px] md:border-t-0 md:border-l"
+      className="fixed inset-x-0 bottom-0 z-40 flex h-[70dvh] flex-col rounded-t-2xl border-t border-rule bg-panel font-sans text-ink shadow-[0_-8px_24px_var(--shadow)] md:inset-x-auto md:top-0 md:right-0 md:h-dvh md:w-[420px] md:rounded-none md:border-t-0 md:border-l md:shadow-none"
     >
-      <header className="flex items-center justify-between gap-2 border-b border-foreground/10 px-3 py-2">
-        <h2 className="text-sm font-semibold">{action ? TITLES[action] : 'Thread'}</h2>
-        <div className="flex gap-1">
+      <header className="flex items-center justify-between gap-2 py-2 pr-2 pl-5 md:pt-4 md:pr-4">
+        <h2 className="text-[11px] font-normal tracking-[0.1em] text-muted uppercase">
+          {action ? TITLES[action] : 'Thread'}
+        </h2>
+        <div className="flex items-center">
           {highlightId && !confirmingDelete && (
-            <button
-              type="button"
-              onClick={() => setConfirmingDelete(true)}
-              disabled={busy}
-              className="rounded px-2 py-1 text-sm text-red-600 hover:bg-foreground/5"
-            >
+            <Button variant="danger" onClick={() => setConfirmingDelete(true)} disabled={busy} className="text-[13px]">
               Delete thread
-            </button>
+            </Button>
           )}
-          <button type="button" onClick={onClose} className="rounded px-2 py-1 text-sm hover:bg-foreground/5">
-            Close
-          </button>
+          <IconButton aria-label="Close" onClick={onClose}>
+            <CloseIcon />
+          </IconButton>
         </div>
       </header>
       {confirmingDelete && (
-        <div className="flex items-center justify-between gap-2 border-b border-foreground/10 bg-red-500/10 px-3 py-2 text-sm">
+        <div className="mx-4 mb-2 flex flex-wrap items-center justify-between gap-x-2 rounded-xl bg-danger-tint py-1 pr-1 pl-4 text-sm">
           <span>Delete this conversation?</span>
-          <div className="flex gap-1">
-            <button
-              type="button"
-              onClick={() => void confirmDelete()}
-              disabled={deleting}
-              className="rounded bg-red-600 px-2 py-1 text-white"
-            >
+          <div className="flex">
+            <Button variant="danger" onClick={() => void confirmDelete()} disabled={deleting} className="font-medium">
               Yes, delete
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirmingDelete(false)}
-              disabled={deleting}
-              className="rounded px-2 py-1 hover:bg-foreground/5"
-            >
+            </Button>
+            <Button variant="quiet" onClick={() => setConfirmingDelete(false)} disabled={deleting}>
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-[18px] overflow-y-auto px-5 pt-1 pb-5">
+        {quote && (
+          <blockquote className="line-clamp-6 font-serif text-[22px] leading-[1.35] break-words">
+            “{quote}”
+          </blockquote>
+        )}
         {thread.map((m) =>
           m.role === 'user' ? (
-            <p key={m.id} className="self-end rounded-lg bg-foreground/5 px-3 py-2 text-sm break-words">
+            <p key={m.id} className="max-w-[85%] self-end rounded-2xl bg-chip px-3.5 py-2 text-sm break-words">
               {m.content}
             </p>
           ) : (
@@ -360,20 +374,18 @@ export function ThreadPanel(props: Props) {
               failed={m.status === 'failed'}
             >
               {m === latest && (
-                <button
-                  type="button"
-                  onClick={reask}
-                  disabled={busy}
-                  className="rounded border border-foreground/20 px-2 py-0.5 text-xs disabled:opacity-50"
-                >
+                <Button onClick={reask} disabled={busy} className="text-[13px]">
+                  <RefreshIcon size={14} />
                   {m.status === 'failed' ? 'Retry' : 'Re-ask'}
-                </button>
+                </Button>
               )}
             </MessageView>
           ),
         )}
         {pending?.question && (
-          <p className="self-end rounded-lg bg-foreground/5 px-3 py-2 text-sm break-words">{pending.question}</p>
+          <p className="max-w-[85%] self-end rounded-2xl bg-chip px-3.5 py-2 text-sm break-words">
+            {pending.question}
+          </p>
         )}
         {pending && streaming && (
           <MessageView
@@ -382,7 +394,7 @@ export function ThreadPanel(props: Props) {
             failed={false}
           />
         )}
-        {pending && !streaming && <p className="text-sm opacity-60">Thinking…</p>}
+        {pending && !streaming && <p className="text-sm text-muted">Thinking…</p>}
         {problem && (
           <div role="alert" className="flex flex-col gap-1 text-sm text-red-700">
             <p>{problem.message}</p>
@@ -394,24 +406,16 @@ export function ThreadPanel(props: Props) {
           </div>
         )}
         {unanswered && !busy && (
-          <button
-            type="button"
-            onClick={reask}
-            className="self-start rounded border border-foreground/20 px-2 py-0.5 text-xs"
-          >
+          <Button onClick={reask} className="self-start text-[13px]">
+            <RefreshIcon size={14} />
             Retry
-          </button>
+          </Button>
         )}
       </div>
 
-      <footer className="flex flex-col gap-2 border-t border-foreground/10 p-3">
-        <ModelSwitcher
-          models={available}
-          value={modelId}
-          onChange={setPicked}
-          disabled={busy || composing}
-        />
-        {composing ? (
+      {composing ? (
+        <footer className="flex flex-col gap-2 border-t border-rule p-3">
+          <ModelSwitcher models={available} value={modelId} onChange={setPicked} disabled />
           <form onSubmit={onAsk} className="flex flex-col gap-2">
             <label className="flex flex-col gap-1 text-sm">
               Question
@@ -436,9 +440,14 @@ export function ThreadPanel(props: Props) {
               </button>
             </div>
           </form>
-        ) : (
-          !unanswered && (
-            <form onSubmit={onFollowUp} className="flex gap-2">
+        </footer>
+      ) : (
+        <footer className="flex flex-col px-4 pt-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:pb-3">
+          {!unanswered && (
+            <form
+              onSubmit={onFollowUp}
+              className="flex items-center gap-2 rounded-[14px] border border-rule bg-surface p-1 pl-3.5 focus-within:outline-2 focus-within:outline-accent"
+            >
               <label className="sr-only" htmlFor="thread-follow-up">
                 Follow-up
               </label>
@@ -446,20 +455,25 @@ export function ThreadPanel(props: Props) {
                 id="thread-follow-up"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                placeholder="Ask a follow-up"
-                className="min-w-0 flex-1 rounded border border-foreground/20 px-2 py-1 text-sm"
+                placeholder="Ask a follow-up…"
+                className="min-w-0 flex-1 bg-transparent py-2.5 text-sm text-ink outline-none placeholder:text-muted"
               />
               <button
                 type="submit"
+                aria-label="Send"
                 disabled={busy || !draft.trim() || !threadId}
-                className="rounded bg-foreground px-3 py-1 text-sm text-background disabled:opacity-50"
+                className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-[10px] bg-ink text-bg transition-opacity focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-40"
               >
-                Send
+                <ArrowUpIcon size={16} strokeWidth={1.8} />
               </button>
             </form>
-          )
-        )}
-      </footer>
+          )}
+          <div className="flex items-center justify-between gap-3 text-xs text-muted">
+            <ModelSwitcher models={available} value={modelId} onChange={setPicked} disabled={busy} />
+            <span className="shrink-0">Context: {scope === 'book' ? 'whole book' : 'this page'}</span>
+          </div>
+        </footer>
+      )}
     </aside>
   );
 }
