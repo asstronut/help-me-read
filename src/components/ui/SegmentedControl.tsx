@@ -1,9 +1,16 @@
 'use client';
 
-import { useRef, type KeyboardEvent } from 'react';
+import { useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { cn } from './cn';
 
-export type SegmentOption<T extends string> = { value: T; label: string };
+export type SegmentOption<T extends string> = {
+  value: T;
+  /** The option's name; shown, unless `content` is given. */
+  label: string;
+  /** Shown in place of the label (the label still names the option). */
+  content?: ReactNode;
+  className?: string;
+};
 
 type Props<T extends string> = {
   /** Names the group, e.g. "Theme" or "Answer using". */
@@ -12,6 +19,8 @@ type Props<T extends string> = {
   value: T;
   onChange: (value: T) => void;
   disabled?: boolean;
+  /** Joined into one bar (the default), or separate cards with a ring around the chosen one. */
+  variant?: 'joined' | 'cards';
   className?: string;
 };
 
@@ -28,6 +37,7 @@ export function SegmentedControl<T extends string>({
   value,
   onChange,
   disabled,
+  variant = 'joined',
   className,
 }: Props<T>) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -52,7 +62,11 @@ export function SegmentedControl<T extends string>({
       aria-disabled={disabled || undefined}
       onKeyDown={disabled ? undefined : onKeyDown}
       style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
-      className={cn('grid overflow-hidden rounded-[10px] border border-rule text-[13px]', className)}
+      className={cn(
+        'grid text-[13px]',
+        variant === 'joined' ? 'overflow-hidden rounded-[10px] border border-rule' : 'gap-2',
+        className,
+      )}
     >
       {options.map((o, i) => {
         const checked = i === current;
@@ -65,17 +79,24 @@ export function SegmentedControl<T extends string>({
             type="button"
             role="radio"
             aria-checked={checked}
+            aria-label={o.content ? o.label : undefined}
             tabIndex={checked ? 0 : -1}
             disabled={disabled}
             onClick={() => onChange(o.value)}
             className={cn(
-              'h-11 min-w-0 cursor-pointer truncate px-3 text-center transition-colors',
-              'focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent',
+              'min-w-0 cursor-pointer truncate px-3 text-center transition-colors',
+              'focus-visible:outline-2 focus-visible:outline-accent',
               'disabled:cursor-default disabled:opacity-50',
-              checked ? 'bg-chip text-ink' : 'text-muted hover:text-ink',
+              variant === 'joined' && 'h-11 focus-visible:-outline-offset-2',
+              variant === 'joined' && (checked ? 'bg-chip text-ink' : 'text-muted hover:text-ink'),
+              // A ring rather than a thicker border, so the chosen card's content doesn't move.
+              variant === 'cards' &&
+                'flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-[10px] border border-rule focus-visible:outline-offset-2',
+              variant === 'cards' && checked && 'ring-2 ring-accent',
+              o.className,
             )}
           >
-            {o.label}
+            {o.content ?? o.label}
           </button>
         );
       })}

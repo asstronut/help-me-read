@@ -133,7 +133,13 @@ test('the font size choice applies to the text and survives a reload', async ({ 
   await expect.poll(() => paragraphFontSize(page)).toBe('18px');
 
   await page.getByRole('button', { name: 'Reading settings' }).click();
-  await page.getByLabel('Font size').selectOption('24');
+  const size = page.getByRole('group', { name: 'Font size' });
+  // 18 → 20 → 22 → 24, the largest.
+  for (const shown of ['20 px', '22 px', '24 px']) {
+    await size.getByRole('button', { name: 'Larger text' }).click();
+    await expect(size.getByRole('status')).toHaveText(shown);
+  }
+  await expect(size.getByRole('button', { name: 'Larger text' })).toBeDisabled();
   await expect.poll(() => paragraphFontSize(page)).toBe('24px');
 
   await page.reload();

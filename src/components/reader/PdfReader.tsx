@@ -15,6 +15,7 @@ import { PdfHighlightLayer, highlightsAt } from './PdfHighlightLayer';
 import { PdfPageBar } from './PdfPageBar';
 import { ProgressFooter } from './ProgressFooter';
 import { ReaderTopBar } from './ReaderTopBar';
+import { ReadingSettings } from './ReadingSettings';
 import type { SelectionBox } from './SelectionMenu';
 import { usePositionSaver } from './usePositionSaver';
 
@@ -209,7 +210,9 @@ export default function PdfReader({
         contents={<ContentsOutline {...outline} placement="bar" />}
         highlightsOpen={highlightsOpen}
         onHighlights={onHighlights}
-      />
+      >
+        <ReadingSettings />
+      </ReaderTopBar>
       {status}
       {/* The pages start at the top of their column: line the ☰ icon (13px into its box) up with them. */}
       <ContentsRail {...outline} roomBeside={roomBeside} top={-13} className="sm:gap-6">
