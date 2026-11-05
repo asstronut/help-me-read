@@ -142,16 +142,18 @@ test('define answers, takes a follow-up, re-asks with another model and reopens'
   await expect(panel(page).getByText('More?')).toBeVisible();
 });
 
-test('Ask with "Use whole book" on creates a whole-book thread', async ({ page }) => {
+test('Ask with "Answer using: Whole book" creates a whole-book thread', async ({ page }) => {
   await openPdf(page);
   await selectPdfText(page, 2, 'Ephemeral joys fade quickly.');
   await pick(page, 'Ask…');
 
   const question = panel(page).getByLabel('Question');
   await expect(question).toHaveValue('');
-  const wholeBook = panel(page).getByLabel('Use whole book');
-  await expect(wholeBook).not.toBeChecked();
-  await wholeBook.check();
+  const scope = panel(page).getByRole('radiogroup', { name: 'Answer using' });
+  await expect(scope.getByRole('radio', { name: 'This page' })).toBeChecked();
+  await expect(panel(page).getByText('Whole book sends more text, so it costs more.')).toBeVisible();
+  await scope.getByRole('radio', { name: 'Whole book' }).click();
+  await expect(scope.getByRole('radio', { name: 'Whole book' })).toBeChecked();
   await question.fill('Why do they fade?');
   const created = page.waitForResponse(
     (r) => r.url().endsWith('/api/threads') && r.request().method() === 'POST',

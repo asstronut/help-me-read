@@ -2,11 +2,12 @@
 
 import { Chat, useChat } from '@ai-sdk/react';
 import { APICallError, DefaultChatTransport, type UIMessage } from 'ai';
-import Link from 'next/link';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { ModelInfo } from '@/lib/ai/models';
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
+import { InlineAlert } from '@/components/ui/InlineAlert';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { ArrowUpIcon, CloseIcon, RefreshIcon } from '@/components/ui/icons';
 import type { Action, ContextScope, ReaderSelection } from '@/lib/types';
 import { MessageView } from './MessageView';
@@ -35,6 +36,11 @@ type ModelOption = ModelInfo & { available: boolean };
 type ChatRequest = { text?: string; modelId?: string; reask?: true };
 type ThreadUIMessage = UIMessage<{ modelId: string }>;
 type Problem = { message: string; overCap: boolean };
+
+const SCOPES = [
+  { value: 'page', label: 'This page' },
+  { value: 'book', label: 'Whole book' },
+] as const;
 
 const TITLES: Record<Action, string> = {
   translate: 'Translate',
@@ -167,7 +173,7 @@ export function ThreadPanel(props: Props) {
   );
   const [problem, setProblem] = useState<Problem | null>(null);
   const [draft, setDraft] = useState('');
-  const [wholeBook, setWholeBook] = useState(false);
+  const [askScope, setAskScope] = useState<ContextScope>('page');
 
   const [chat] = useState(() => new Chat<ThreadUIMessage>({ transport }));
   const { messages: live, setMessages } = useChat({ chat });
@@ -286,9 +292,8 @@ export function ThreadPanel(props: Props) {
     setDraft('');
     setProblem(null);
     setPending({ question });
-    const chosen: ContextScope = wholeBook ? 'book' : 'page';
-    setScope(chosen);
-    void createThread(props.action, props.selection, chosen).then((c) => begin(c, question));
+    setScope(askScope);
+    void createThread(props.action, props.selection, askScope).then((c) => begin(c, question));
   }
 
   function onFollowUp(e: FormEvent) {
@@ -320,6 +325,17 @@ export function ThreadPanel(props: Props) {
   const composing = action === 'ask' && threadId === null;
   // A non-Ask thread whose first answer never arrived (refused, or reopened that way).
   const unanswered = loaded && threadId !== null && action !== 'ask' && answers.length === 0;
+
+  const quoted = quote && (
+    <blockquote className="line-clamp-6 shrink-0 font-serif text-[22px] leading-[1.35] break-words">
+      “{quote}”
+    </blockquote>
+  );
+  const alert = problem && (
+    <InlineAlert action={problem.overCap ? { label: 'Open Settings', href: '/settings' } : undefined}>
+      {problem.message}
+    </InlineAlert>
+  );
 
   return (
     <aside
@@ -355,93 +371,83 @@ export function ThreadPanel(props: Props) {
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col gap-[18px] overflow-y-auto px-5 pt-1 pb-5">
-        {quote && (
-          <blockquote className="line-clamp-6 font-serif text-[22px] leading-[1.35] break-words">
-            “{quote}”
-          </blockquote>
-        )}
-        {thread.map((m) =>
-          m.role === 'user' ? (
-            <p key={m.id} className="max-w-[85%] self-end rounded-2xl bg-chip px-3.5 py-2 text-sm break-words">
-              {m.content}
-            </p>
-          ) : (
-            <MessageView
-              key={m.id}
-              content={m.content}
-              modelLabel={label(m.modelId)}
-              failed={m.status === 'failed'}
-            >
-              {m === latest && (
-                <Button onClick={reask} disabled={busy} className="text-[13px]">
-                  <RefreshIcon size={14} />
-                  {m.status === 'failed' ? 'Retry' : 'Re-ask'}
-                </Button>
-              )}
-            </MessageView>
-          ),
-        )}
-        {pending?.question && (
-          <p className="max-w-[85%] self-end rounded-2xl bg-chip px-3.5 py-2 text-sm break-words">
-            {pending.question}
-          </p>
-        )}
-        {pending && streaming && (
-          <MessageView
-            content={textOf(streaming)}
-            modelLabel={label(streaming.metadata?.modelId ?? null)}
-            failed={false}
-          />
-        )}
-        {pending && !streaming && <p className="text-sm text-muted">Thinking…</p>}
-        {problem && (
-          <div role="alert" className="flex flex-col gap-1 text-sm text-red-700">
-            <p>{problem.message}</p>
-            {problem.overCap && (
-              <Link href="/settings" className="underline">
-                Settings
-              </Link>
-            )}
-          </div>
-        )}
-        {unanswered && !busy && (
-          <Button onClick={reask} className="self-start text-[13px]">
-            <RefreshIcon size={14} />
-            Retry
-          </Button>
-        )}
-      </div>
-
       {composing ? (
-        <footer className="flex flex-col gap-2 border-t border-rule p-3">
-          <ModelSwitcher models={available} value={modelId} onChange={setPicked} disabled />
-          <form onSubmit={onAsk} className="flex flex-col gap-2">
-            <label className="flex flex-col gap-1 text-sm">
-              Question
-              <textarea
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                rows={3}
-                className="rounded border border-foreground/20 p-2"
-              />
-            </label>
-            <div className="flex items-center justify-between gap-2">
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={wholeBook} onChange={(e) => setWholeBook(e.target.checked)} />
-                Use whole book
-              </label>
-              <button
-                type="submit"
-                disabled={busy || !draft.trim()}
-                className="rounded bg-foreground px-3 py-1 text-sm text-background disabled:opacity-50"
-              >
-                Ask
-              </button>
-            </div>
-          </form>
-        </footer>
+        <form onSubmit={onAsk} className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 pt-1 pb-4">
+          {quoted}
+          <label className="flex flex-col gap-1.5 text-[13px]">
+            <span className="font-medium">Your question</span>
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              rows={4}
+              placeholder="What would you like to know about this passage?"
+              className="resize-y rounded-xl border border-rule bg-surface px-3.5 py-3 text-[15px] leading-normal text-ink placeholder:text-muted focus-visible:outline-2 focus-visible:outline-accent"
+            />
+          </label>
+          <div className="flex flex-col gap-1.5">
+            {/* The radio group is named "Answer using" too; this is its visible label. */}
+            <span aria-hidden="true" className="text-[13px] font-medium">
+              Answer using
+            </span>
+            <SegmentedControl label="Answer using" options={SCOPES} value={askScope} onChange={setAskScope} />
+            <span className="text-xs leading-snug text-muted">Whole book sends more text, so it costs more.</span>
+          </div>
+          {alert}
+          <div className="mt-auto flex items-center justify-between gap-3">
+            <ModelSwitcher models={available} value={modelId} onChange={setPicked} disabled />
+            <Button type="submit" variant="primary" disabled={busy || !draft.trim()}>
+              Ask
+            </Button>
+          </div>
+        </form>
       ) : (
+        <div className="flex min-h-0 flex-1 flex-col gap-[18px] overflow-y-auto px-5 pt-1 pb-5">
+          {quoted}
+          {thread.map((m) =>
+            m.role === 'user' ? (
+              <p key={m.id} className="max-w-[85%] self-end rounded-2xl bg-chip px-3.5 py-2 text-sm break-words">
+                {m.content}
+              </p>
+            ) : (
+              <MessageView
+                key={m.id}
+                content={m.content}
+                modelLabel={label(m.modelId)}
+                failed={m.status === 'failed'}
+              >
+                {m === latest && (
+                  <Button onClick={reask} disabled={busy} className="text-[13px]">
+                    <RefreshIcon size={14} />
+                    {m.status === 'failed' ? 'Retry' : 'Re-ask'}
+                  </Button>
+                )}
+              </MessageView>
+            ),
+          )}
+          {pending?.question && (
+            <p className="max-w-[85%] self-end rounded-2xl bg-chip px-3.5 py-2 text-sm break-words">
+              {pending.question}
+            </p>
+          )}
+          {pending && streaming && (
+            <MessageView
+              content={textOf(streaming)}
+              modelLabel={label(streaming.metadata?.modelId ?? null)}
+              failed={false}
+            />
+          )}
+          {pending && !streaming && <p className="text-sm text-muted">Thinking…</p>}
+          {alert}
+          {unanswered && !busy && (
+            <Button onClick={reask} className="self-start text-[13px]">
+              <RefreshIcon size={14} />
+              Retry
+            </Button>
+          )}
+        </div>
+      )}
+
+      {!composing && (
         <footer className="flex flex-col px-4 pt-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:pb-3">
           {!unanswered && (
             <form
