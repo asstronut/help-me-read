@@ -31,9 +31,17 @@ async function chapterFrame(page: Page): Promise<Frame> {
   return page.frames().find((f) => f !== page.mainFrame() && f.url() !== 'about:blank')!;
 }
 
-/** Markers (P1, P2, …) whose first characters are on screen right now. */
+/**
+ * Markers (P1, P2, …) whose first characters are on screen right now. None while foliate is
+ * replacing the chapter's iframe (a page turn into the next section, or a reload), so a poll
+ * looks again rather than failing on the old frame.
+ */
 async function visibleMarkers(page: Page): Promise<string[]> {
   const frame = await chapterFrame(page);
+  const replaced = (e: Error) => {
+    if (/Execution context was destroyed|Frame was detached/.test(e.message)) return [];
+    throw e;
+  };
   return frame.evaluate(() => {
     // The chapter's iframe is as wide as all its pages; the elements around it clip it to the
     // current page, so the next page can sit inside the window and still be hidden.
@@ -62,7 +70,7 @@ async function visibleMarkers(page: Page): Promise<string[]> {
         seen.push(marker);
     }
     return seen;
-  });
+  }).catch(replaced);
 }
 
 async function paragraphFontSize(page: Page): Promise<string> {
