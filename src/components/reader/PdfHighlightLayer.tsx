@@ -11,12 +11,13 @@ const percent = (n: number) => `${n * 100}%`;
  * boxes follow it at any zoom. Notes are filled; threads get a dotted underline. Taps are found by
  * `highlightsAt`, so the boxes never get in the way of selecting text.
  *
- * The tints multiply onto white paper, so the text stays dark. Dark inverts the page to black,
- * where multiply would leave nothing to see, so there the tints are screened on instead.
+ * The tints multiply onto white paper, so the text stays dark. Dark inverts the page to black
+ * (unless the reader keeps the PDF's colours), where multiply would leave nothing to see, so
+ * there the tints are screened on instead.
  */
 export function PdfHighlightLayer({ highlights }: { highlights: HighlightView[] }) {
   return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 z-[1] mix-blend-multiply [.dark_&]:mix-blend-screen">
+    <div aria-hidden className="pointer-events-none absolute inset-0 z-[1] mix-blend-multiply [.dark_[data-pdf-colours=invert]_&]:mix-blend-screen">
       {highlights.flatMap((h) =>
         pdfRects(h).map((r, i) => {
           const style: CSSProperties = {

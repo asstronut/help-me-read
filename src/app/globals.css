@@ -98,7 +98,11 @@ body {
   color: var(--ink);
 }
 
-/* Dark inverts the page canvases; highlights are separate elements and stay as drawn. */
-.dark .react-pdf__Page canvas {
+/*
+ * Dark inverts the page canvases, unless the reader keeps the PDF's colours (Aa, "Keep PDF colours
+ * in Dark"); the PDF reader marks which with data-pdf-colours. Highlights are separate elements
+ * and stay as drawn.
+ */
+.dark [data-pdf-colours='invert'] .react-pdf__Page canvas {
   filter: invert(1) hue-rotate(180deg);
 }

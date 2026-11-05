@@ -172,12 +172,82 @@ test('a theme that cannot be saved goes back and says so', async ({ page }) => {
   await expect(settings(page).getByRole('radio', { name: 'Light' })).toBeChecked();
 });
 
-test('a PDF has the theme in Aa but no typeface options', async ({ page }) => {
+test('a PDF has the theme and its own options in Aa, but no typeface options', async ({ page }) => {
   const id = await addBook(page, 'sample.pdf');
   await page.goto(`/read/${id}`);
   await expect(page.locator('.react-pdf__Page canvas').first()).toBeVisible();
   await openSettings(page);
   await expect(settings(page).getByRole('radiogroup', { name: 'Theme' })).toBeVisible();
+  await expect(settings(page).getByRole('radiogroup', { name: 'Page fit' })).toBeVisible();
   await expect(settings(page).getByRole('radiogroup', { name: 'Typeface' })).toHaveCount(0);
   await expect(settings(page).getByRole('group', { name: 'Font size' })).toHaveCount(0);
+});
+
+/** The first page's box, and the visible height of the scrolling column the pages are in. */
+async function pdfFit(page: Page) {
+  return page.locator('[data-slot="1"]').evaluate((slot) => {
+    const scroller = slot.closest<HTMLElement>('.overflow-auto')!;
+    return { pageHeight: slot.getBoundingClientRect().height, viewHeight: scroller.clientHeight };
+  });
+}
+
+test('Whole page fits the PDF page in the window, and Fit to width goes back', async ({ page }) => {
+  const id = await addBook(page, 'sample.pdf');
+  await page.goto(`/read/${id}`);
+  await expect(page.locator('.react-pdf__Page canvas').first()).toBeVisible();
+  const fitToWidth = page.getByRole('button', { name: 'Fit to width' });
+  await expect(fitToWidth).toHaveAttribute('aria-pressed', 'true');
+
+  await openSettings(page);
+  const fit = settings(page).getByRole('radiogroup', { name: 'Page fit' });
+  await expect(fit.getByRole('radio', { name: 'Fit width' })).toBeChecked();
+  await fit.getByRole('radio', { name: 'Whole page' }).click();
+  await expect.poll(async () => {
+    const { pageHeight, viewHeight } = await pdfFit(page);
+    return pageHeight <= viewHeight;
+  }).toBe(true);
+  await expect(fitToWidth).toHaveAttribute('aria-pressed', 'false');
+
+  // The arrow keys move between the choices and don't turn the page.
+  await fit.getByRole('radio', { name: 'Whole page' }).focus();
+  await page.keyboard.press('ArrowLeft');
+  await expect(fit.getByRole('radio', { name: 'Fit width' })).toBeChecked();
+  await page.keyboard.press('ArrowRight');
+  await expect(fit.getByRole('radio', { name: 'Whole page' })).toBeChecked();
+  await expect(page.getByLabel('Page number')).toHaveValue('1');
+
+  await page.reload();
+  await expect(page.locator('.react-pdf__Page canvas').first()).toBeVisible();
+  const { pageHeight, viewHeight } = await pdfFit(page);
+  expect(pageHeight).toBeLessThanOrEqual(viewHeight);
+
+  await fitToWidth.click();
+  await expect(fitToWidth).toHaveAttribute('aria-pressed', 'true');
+  // On a phone the screen's width already limits the page, so both fits are the same size there.
+  if (page.viewportSize()!.width >= 640) {
+    await expect.poll(async () => (await pdfFit(page)).pageHeight).toBeGreaterThan(pageHeight);
+  }
+  await openSettings(page);
+  await expect(fit.getByRole('radio', { name: 'Fit width' })).toBeChecked();
+});
+
+test('Keep PDF colours in Dark stops the page being inverted', async ({ page }) => {
+  await page.request.put('/api/settings', { data: { ...DEFAULTS, theme: 'dark' } });
+  const id = await addBook(page, 'sample.pdf');
+  await page.goto(`/read/${id}`);
+  const canvas = page.locator('.react-pdf__Page canvas').first();
+  // The highlight tints are screened onto an inverted (black) page, and multiplied onto white paper.
+  const tints = page.locator('.react-pdf__Page [class~="mix-blend-multiply"]').first();
+  await expect(canvas).toHaveCSS('filter', 'invert(1) hue-rotate(180deg)');
+  await expect(tints).toHaveCSS('mix-blend-mode', 'screen');
+
+  await openSettings(page);
+  const keep = settings(page).getByRole('checkbox', { name: 'Keep PDF colours in Dark' });
+  await expect(keep).not.toBeChecked();
+  await keep.check();
+  await expect(canvas).toHaveCSS('filter', 'none');
+  await expect(tints).toHaveCSS('mix-blend-mode', 'multiply');
+
+  await page.reload();
+  await expect(canvas).toHaveCSS('filter', 'none');
 });

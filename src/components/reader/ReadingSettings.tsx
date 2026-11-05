@@ -10,6 +10,7 @@ import {
   type FontSize,
   type LineSpacing,
   type LineWidth,
+  type PdfFit,
   type Typeface,
 } from '@/lib/reader/reading-prefs';
 import { applyTheme, saveTheme, shownTheme, useShownTheme } from '@/lib/settings/theme-client';
@@ -45,6 +46,11 @@ const WIDTH_OPTIONS: SegmentOption<LineWidth>[] = [
   { value: 'narrow', label: 'Narrow' },
   { value: 'medium', label: 'Medium' },
   { value: 'wide', label: 'Wide' },
+];
+
+const FIT_OPTIONS: SegmentOption<PdfFit>[] = [
+  { value: 'width', label: 'Fit width' },
+  { value: 'page', label: 'Whole page' },
 ];
 
 /** A caption above its control. The control carries its own name, so the caption is not read out twice. */
@@ -209,6 +215,36 @@ export function TypographyOptions(props: TypographyProps) {
           className="flex-1"
         />
       </Row>
+    </>
+  );
+}
+
+type PdfProps = {
+  fit: PdfFit;
+  onFit: (fit: PdfFit) => void;
+  keepColours: boolean;
+  onKeepColours: (keep: boolean) => void;
+};
+
+/** A PDF's options: the page is drawn as it is, so only how it fits and its colours in Dark. */
+export function PdfOptions({ fit, onFit, keepColours, onKeepColours }: PdfProps) {
+  return (
+    <>
+      <Row caption="Fit">
+        <SegmentedControl label="Page fit" options={FIT_OPTIONS} value={fit} onChange={onFit} className="flex-1" />
+      </Row>
+      <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-sm">
+        <span>Keep PDF colours in Dark</span>
+        <input
+          type="checkbox"
+          checked={keepColours}
+          onChange={(e) => onKeepColours(e.target.checked)}
+          className="size-[18px] cursor-pointer accent-ink"
+        />
+      </label>
+      <p className="text-xs leading-normal text-muted">
+        A PDF keeps its own font and layout. For font and spacing options, read an EPUB.
+      </p>
     </>
   );
 }

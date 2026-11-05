@@ -8,8 +8,10 @@ type Props = {
   page: number;
   numPages: number;
   onPage: (page: number) => void;
-  /** Zoom relative to the page fitted to the width: 1 is fitted. */
+  /** Zoom relative to the fitted page (to the width, or the whole page): 1 is fitted. */
   zoom: number;
+  /** Whether the page is fitted to the width, unzoomed. */
+  fittedToWidth: boolean;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onFitWidth: () => void;
@@ -35,7 +37,17 @@ function BarButton({ className, ...props }: ComponentProps<'button'> & { 'aria-l
 const Divider = () => <span aria-hidden="true" className="mx-0.5 h-5 w-px shrink-0 bg-rule sm:mx-1" />;
 
 /** The PDF's page and zoom controls, floating over the bottom of the pages. */
-export function PdfPageBar({ page, numPages, onPage, zoom, onZoomIn, onZoomOut, onFitWidth, className }: Props) {
+export function PdfPageBar({
+  page,
+  numPages,
+  onPage,
+  zoom,
+  fittedToWidth,
+  onZoomIn,
+  onZoomOut,
+  onFitWidth,
+  className,
+}: Props) {
   const [draft, setDraft] = useState<string | null>(null);
 
   function commit() {
@@ -44,7 +56,6 @@ export function PdfPageBar({ page, numPages, onPage, zoom, onZoomIn, onZoomOut, 
     if (Number.isFinite(typed)) onPage(typed);
   }
 
-  const fitted = zoom === 1;
   return (
     <nav
       aria-label="Page controls"
@@ -75,7 +86,7 @@ export function PdfPageBar({ page, numPages, onPage, zoom, onZoomIn, onZoomOut, 
       <BarButton aria-label="Zoom out" onClick={onZoomOut}>
         <MinusIcon size={16} />
       </BarButton>
-      {/* Relative to the width-fitted page, which is 100%. Hidden on a phone to keep the bar on screen. */}
+      {/* Relative to the fitted page, which is 100%. Hidden on a phone to keep the bar on screen. */}
       <span className="hidden w-11 text-center tabular-nums sm:inline">{Math.round(zoom * 100)}%</span>
       <BarButton aria-label="Zoom in" onClick={onZoomIn}>
         <PlusIcon size={16} />
@@ -84,14 +95,14 @@ export function PdfPageBar({ page, numPages, onPage, zoom, onZoomIn, onZoomOut, 
       <button
         type="button"
         aria-label="Fit to width"
-        aria-pressed={fitted}
+        aria-pressed={fittedToWidth}
         onClick={onFitWidth}
         className={cn(
           'my-1.5 inline-flex h-8 shrink-0 cursor-pointer items-center rounded-lg px-3 transition-colors',
           // The visible part of the button is 32px, but the area it answers to is the bar's full 44px.
           'relative after:absolute after:inset-x-0 after:-inset-y-1.5',
           'focus-visible:outline-2 focus-visible:outline-accent',
-          fitted ? 'bg-chip' : 'hover:bg-chip',
+          fittedToWidth ? 'bg-chip' : 'hover:bg-chip',
         )}
       >
         <span className="sm:hidden">Fit</span>
