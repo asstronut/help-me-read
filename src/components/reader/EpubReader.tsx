@@ -277,8 +277,9 @@ export default function EpubReader({
       view.style.cssText = 'display:block;width:100%;height:100%';
       view.addEventListener('relocate', (e) => {
         const { cfi, fraction, tocItem } = (e as CustomEvent<RelocateDetail>).detail;
-        save({ cfi });
-        if (typeof fraction === 'number') setFraction(fraction);
+        const known = typeof fraction === 'number' ? fraction : null;
+        save({ cfi }, known);
+        if (known !== null) setFraction(known);
         setTocId(tocItem?.id ?? null);
       });
       view.addEventListener('load', (e) => {

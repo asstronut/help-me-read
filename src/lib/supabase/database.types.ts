@@ -25,14 +25,14 @@ export type Database = {
           Tables: {
             "books": {
                   Row: {
-                    "author": string | null,"created_at": string,"extracted_at": string | null,"format": string,"id": string,"last_opened_at": string | null,"owner_id": string,"segment_count": number,"size_bytes": number,"storage_path": string,"title": string
+                    "author": string | null,"created_at": string,"extracted_at": string | null,"format": string,"id": string,"last_opened_at": string | null,"owner_id": string,"progress": number | null,"segment_count": number,"size_bytes": number,"storage_path": string,"title": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "author"?: string | null,"created_at"?: string,"extracted_at"?: string | null,"format": string,"id"?: string,"last_opened_at"?: string | null,"owner_id"?: string,"segment_count"?: number,"size_bytes": number,"storage_path": string,"title": string
+                    "author"?: string | null,"created_at"?: string,"extracted_at"?: string | null,"format": string,"id"?: string,"last_opened_at"?: string | null,"owner_id"?: string,"progress"?: number | null,"segment_count"?: number,"size_bytes": number,"storage_path": string,"title": string
                   }
                   Update: {
-                    "author"?: string | null,"created_at"?: string,"extracted_at"?: string | null,"format"?: string,"id"?: string,"last_opened_at"?: string | null,"owner_id"?: string,"segment_count"?: number,"size_bytes"?: number,"storage_path"?: string,"title"?: string
+                    "author"?: string | null,"created_at"?: string,"extracted_at"?: string | null,"format"?: string,"id"?: string,"last_opened_at"?: string | null,"owner_id"?: string,"progress"?: number | null,"segment_count"?: number,"size_bytes"?: number,"storage_path"?: string,"title"?: string
                   }
                   Relationships: [
                     

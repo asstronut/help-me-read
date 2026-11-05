@@ -118,7 +118,7 @@ export default function PdfReader({
   }, []);
 
   useEffect(() => {
-    if (numPages > 0) save({ page });
+    if (numPages > 0) save({ page }, page / numPages);
   }, [page, numPages, save]);
 
   useEffect(

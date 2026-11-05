@@ -6,18 +6,24 @@ import type { ReadingLocation } from '@/lib/types';
 
 const SAVE_TIMEOUT_MS = 10_000;
 
+/** Where the reader is, and how far through the book that is (0 to 1), when the reader knows. */
+type PositionUpdate = { location: ReadingLocation; progress: number | null };
+
 /** Saves the reading position of a book; `status` is a line to show when saving is not working. */
 export function usePositionSaver(bookId: string) {
   const [saveResult, setSaveResult] = useState<SaveResult>('saved');
-  const saverRef = useRef<ReturnType<typeof createPositionSaver> | null>(null);
+  const saverRef = useRef<ReturnType<typeof createPositionSaver<PositionUpdate>> | null>(null);
 
   useEffect(() => {
-    const saver = createPositionSaver(
-      async (location) => {
+    const saver = createPositionSaver<PositionUpdate>(
+      async ({ location, progress }) => {
         const res = await fetch(`/api/books/${bookId}/position`, {
           method: 'PUT',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(location),
+          body: JSON.stringify({
+            ...location,
+            progress: progress === null ? undefined : Math.min(Math.max(progress, 0), 1),
+          }),
           keepalive: true,
           signal: AbortSignal.timeout(SAVE_TIMEOUT_MS),
         });
@@ -45,6 +51,9 @@ export function usePositionSaver(bookId: string) {
       </p>
     );
 
-  const save = useCallback((location: ReadingLocation) => saverRef.current?.update(location), []);
+  const save = useCallback(
+    (location: ReadingLocation, progress: number | null) => saverRef.current?.update({ location, progress }),
+    [],
+  );
   return { save, status };
 }

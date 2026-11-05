@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, test } from 'vitest';
 import { apiClient } from '../helpers/api-client';
 import { INTRUDER, OWNER, ensureUser } from '../helpers/users';
 
-type ListItem = { id: string; lastOpenedAt: string | null };
+type ListItem = { id: string; lastOpenedAt: string | null; progress: number | null };
 
 async function signedIn(user: { email: string; password: string }) {
   const api = apiClient();
@@ -91,5 +91,37 @@ describe('reading position', () => {
     for (const body of [{ page: 'x' }, { page: 0 }, { page: 1.5 }, {}, { cfi: '' }]) {
       expect((await api.put(`/api/books/${id}/position`, body)).status).toBe(400);
     }
+  });
+
+  test('progress saved with a position is listed with the book, and a new book has none', async () => {
+    const api = await signedIn(OWNER);
+    const id = await newBook(api, 'Progress Book');
+    const listed = async () =>
+      ((await (await api.get('/api/books')).json()) as { books: ListItem[] }).books.find((b) => b.id === id)!;
+    expect((await listed()).progress).toBeNull();
+
+    expect((await api.put(`/api/books/${id}/position`, { page: 3, progress: 0.375 })).status).toBe(204);
+    expect((await listed()).progress).toBeCloseTo(0.375, 5);
+    // The progress is not part of the location.
+    expect(await (await api.get(`/api/books/${id}/position`)).json()).toEqual({ location: { page: 3 } });
+
+    // A position without progress keeps the last one.
+    expect((await api.put(`/api/books/${id}/position`, { cfi: 'epubcfi(/6/2!/4/2)' })).status).toBe(204);
+    expect((await listed()).progress).toBeCloseTo(0.375, 5);
+
+    expect((await api.put(`/api/books/${id}/position`, { cfi: 'epubcfi(/6/8!/4/2)', progress: 1 })).status).toBe(
+      204,
+    );
+    expect((await listed()).progress).toBe(1);
+  });
+
+  test('rejects progress outside 0 to 1, or not a number', async () => {
+    const api = await signedIn(OWNER);
+    const id = await newBook(api, 'Bad Progress');
+    for (const progress of [-0.1, 1.5, '0.5', null]) {
+      expect((await api.put(`/api/books/${id}/position`, { page: 1, progress })).status).toBe(400);
+    }
+    const { books } = (await (await api.get('/api/books')).json()) as { books: ListItem[] };
+    expect(books.find((b) => b.id === id)!.progress).toBeNull();
   });
 });
