@@ -12,7 +12,7 @@ import { watchTaps } from '@/lib/selection/tap';
 import { watchSelection } from '@/lib/selection/watch';
 import type { HighlightView, ReaderSelection } from '@/lib/types';
 import { HIGHLIGHT_HEX, HIGHLIGHT_INKS } from './highlight-colors';
-import { ReaderToolbar } from './ReaderToolbar';
+import { PageTurnEdge } from './PageTurnEdge';
 import { ReaderTopBar } from './ReaderTopBar';
 import { FONT_SIZES, ReadingSettings } from './ReadingSettings';
 import type { SelectionBox } from './SelectionMenu';
@@ -221,18 +221,21 @@ export default function EpubReader({
       <ReaderTopBar title={title}>
         <ReadingSettings fontSize={fontSize} onFontSize={chooseFontSize} />
       </ReaderTopBar>
-      <ReaderToolbar
-        onPrev={() => void viewRef.current?.prev()}
-        onNext={() => void viewRef.current?.next()}
-      />
       {status}
       {error && (
         <p role="alert" className="p-4 text-sm text-red-600">
           Could not open this EPUB.
         </p>
       )}
-      {/* Note highlights are drawn by foliate at this opacity: the theme's tint strength. */}
-      <div ref={hostRef} className="min-h-0 flex-1 [--overlayer-highlight-opacity:var(--highlight-alpha)]" />
+      <div className="group flex min-h-0 flex-1 sm:px-7">
+        <PageTurnEdge direction="previous" onClick={() => void viewRef.current?.prev()} />
+        {/* Note highlights are drawn by foliate at this opacity: the theme's tint strength. */}
+        <div
+          ref={hostRef}
+          className="min-w-0 flex-1 [--overlayer-highlight-opacity:var(--highlight-alpha)]"
+        />
+        <PageTurnEdge direction="next" onClick={() => void viewRef.current?.next()} />
+      </div>
     </div>
   );
 }

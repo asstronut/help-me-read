@@ -284,8 +284,19 @@ async function epubWordOnScreen(page: Page, frame: Frame, marker: string, word: 
   let box = await epubWordBox(page, frame, marker, word);
   for (let turns = 0; box.x + box.width > viewport.width && turns < 10; turns++) {
     const before = box.x;
-    await page.getByRole('button', { name: 'Next page' }).click();
-    await expect.poll(async () => (await epubWordBox(page, frame, marker, word)).x).not.toBe(before);
+    // foliate ignores a page turn asked for within 100 ms of the last one, so a click the reader
+    // dropped is clicked again. The 300 ms between tries is long enough that an accepted turn
+    // has always moved the text, so this never turns two pages.
+    await expect
+      .poll(
+        async () => {
+          const x = (await epubWordBox(page, frame, marker, word)).x;
+          if (x === before) await page.getByRole('button', { name: 'Next page' }).click();
+          return x;
+        },
+        { intervals: [300] },
+      )
+      .not.toBe(before);
     box = await epubWordBox(page, frame, marker, word);
   }
   return box;
