@@ -222,7 +222,6 @@ export default function EpubReader({
         <ReadingSettings fontSize={fontSize} onFontSize={chooseFontSize} />
       </ReaderTopBar>
       <ReaderToolbar
-        format="epub"
         onPrev={() => void viewRef.current?.prev()}
         onNext={() => void viewRef.current?.next()}
       />
