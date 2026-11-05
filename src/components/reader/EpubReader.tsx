@@ -11,7 +11,7 @@ import { captureEpubSelection } from '@/lib/selection/capture-epub';
 import { watchTaps } from '@/lib/selection/tap';
 import { watchSelection } from '@/lib/selection/watch';
 import type { HighlightView, ReaderSelection } from '@/lib/types';
-import { HIGHLIGHT_FILLS, HIGHLIGHT_INKS } from './highlight-colors';
+import { HIGHLIGHT_HEX, HIGHLIGHT_INKS } from './highlight-colors';
 import { FONT_SIZES, ReaderToolbar } from './ReaderToolbar';
 import type { SelectionBox } from './SelectionMenu';
 import { usePositionSaver } from './usePositionSaver';
@@ -41,10 +41,10 @@ function readFontSize(): number {
 /** Font size, and the page's theme colours (the chapter is drawn in an iframe that does not inherit them). */
 function readerCss(size: number): string {
   const theme = getComputedStyle(document.documentElement);
-  const background = theme.getPropertyValue('--background');
-  const foreground = theme.getPropertyValue('--foreground');
+  const bg = theme.getPropertyValue('--bg');
+  const ink = theme.getPropertyValue('--ink');
   return `html, body, p { font-size: ${size}px !important; }
-html, body { background: ${background} !important; color: ${foreground} !important; }`;
+html, body { background: ${bg} !important; color: ${ink} !important; }`;
 }
 
 /** The range's box in the reader's viewport (the section is drawn in an iframe). */
@@ -172,7 +172,7 @@ export default function EpubReader({
             g.append(
               h.kind === 'thread'
                 ? Overlayer.underline(rects, { color: HIGHLIGHT_INKS[h.color], width: 2 })
-                : Overlayer.highlight(rects, { color: HIGHLIGHT_FILLS[h.color] }),
+                : Overlayer.highlight(rects, { color: HIGHLIGHT_HEX[h.color] }),
             );
           }
           return g;
@@ -227,7 +227,8 @@ export default function EpubReader({
           Could not open this EPUB.
         </p>
       )}
-      <div ref={hostRef} className="min-h-0 flex-1" />
+      {/* Note highlights are drawn by foliate at this opacity: the theme's tint strength. */}
+      <div ref={hostRef} className="min-h-0 flex-1 [--overlayer-highlight-opacity:var(--highlight-alpha)]" />
     </div>
   );
 }

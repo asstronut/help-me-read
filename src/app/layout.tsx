@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Literata } from "next/font/google";
 import { currentTheme } from "@/lib/settings/settings.server";
 import { createClient } from "@/lib/supabase/server";
 import "./globals.css";
@@ -13,6 +13,14 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+// Reading text and serif titles. Variable, with the optical-size axis so large titles get display shapes.
+const literata = Literata({
+  variable: "--font-literata",
+  subsets: ["latin", "latin-ext"],
+  style: ["normal", "italic"],
+  axes: ["opsz"],
 });
 
 export const metadata: Metadata = {
@@ -29,7 +37,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${theme} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${literata.variable} ${theme} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

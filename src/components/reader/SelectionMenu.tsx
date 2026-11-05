@@ -9,6 +9,7 @@ import {
   type MenuItem,
   type ReaderSelection,
 } from '@/lib/types';
+import { HIGHLIGHT_HEX } from './highlight-colors';
 
 /** Where the selection is on screen, in viewport pixels. */
 export type SelectionBox = { top: number; bottom: number; left: number; right: number };
@@ -27,13 +28,6 @@ const LABELS: Record<MenuItem, string> = {
   simplify: 'Simplify',
   ask: 'Ask…',
   vocab: '+Vocab',
-};
-
-const DOT_CLASSES: Record<HighlightColor, string> = {
-  yellow: 'bg-yellow-300',
-  green: 'bg-green-300',
-  blue: 'bg-sky-300',
-  pink: 'bg-pink-300',
 };
 
 const GAP = 8;
@@ -94,7 +88,8 @@ export function SelectionMenu({ selection, box, onPick, onColor }: Props) {
                 type="button"
                 aria-label={`Highlight ${color}`}
                 onClick={() => onColor(color)}
-                className={`size-6 rounded-full border border-foreground/20 ${DOT_CLASSES[color]}`}
+                style={{ backgroundColor: HIGHLIGHT_HEX[color] }}
+                className="size-6 rounded-full border border-foreground/20"
               />
             ))}
           </div>
