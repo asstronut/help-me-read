@@ -94,3 +94,26 @@ test('a stored model that is no longer available is dropped, so settings still s
   expect(body.settings.explanationLanguage).toBe('French');
   expect(body.settings.actionModels).toEqual({});
 });
+
+test('the account section shows the email, and Sign out goes to the login page', async ({ page }) => {
+  // The real logout ends every session of the shared test owner, so it is answered here instead.
+  let loggedOut = false;
+  await page.route('**/api/auth/logout', (route) => {
+    loggedOut = true;
+    return route.fulfill({ status: 200, json: { ok: true } });
+  });
+  await page.goto('/settings');
+  const account = page.getByRole('region', { name: 'Account' });
+  await expect(account).toContainText(OWNER.email);
+  await account.getByRole('button', { name: 'Sign out' }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  expect(loggedOut).toBe(true);
+});
+
+test('a failed sign out says so and stays on settings', async ({ page }) => {
+  await page.route('**/api/auth/logout', (route) => route.fulfill({ status: 500 }));
+  await page.goto('/settings');
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Could not sign out. Please try again.' })).toBeVisible();
+  await expect(page).toHaveURL(/\/settings$/);
+});
