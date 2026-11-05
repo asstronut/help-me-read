@@ -44,13 +44,68 @@ function readFontSize(): number {
   }
 }
 
-/** Font size, and the page's theme colours (the chapter is drawn in an iframe that does not inherit them). */
+/** The longest line of text, in ems of the chosen font size: about 70 characters. */
+const LINE_WIDTH_EM = 34;
+const LINE_HEIGHT = 1.7;
+
+/** The family names in a CSS font-family list, without quotes. */
+const familyNames = (list: string) => list.split(',').map((f) => f.trim().replace(/^["']|["']$/g, ''));
+
+/**
+ * The page's @font-face rules for `families`, with their font URLs made absolute. next/font
+ * writes these rules into the page's stylesheets with URLs relative to the stylesheet, and the
+ * chapter's iframe sees neither, so the reading font has to be declared again inside it.
+ */
+function fontFaces(families: string[]): string {
+  const rules: string[] = [];
+  for (const sheet of document.styleSheets) {
+    let list: CSSRuleList;
+    try {
+      list = sheet.cssRules;
+    } catch {
+      continue; // a stylesheet from another origin cannot be read
+    }
+    const base = sheet.href ?? document.baseURI;
+    for (const rule of list) {
+      if (!(rule instanceof CSSFontFaceRule)) continue;
+      const family = familyNames(rule.style.getPropertyValue('font-family'))[0];
+      if (!families.includes(family)) continue;
+      const absolute = (_: string, quote: string, url: string) => `url(${quote}${new URL(url, base)}${quote})`;
+      rules.push(rule.cssText.replace(/url\((["']?)([^"')]+)\1\)/g, absolute));
+    }
+  }
+  return rules.join('\n');
+}
+
+let readingFontFaces: string | null = null;
+
+/**
+ * The chapter's styles: font size, the reading font and line height, and the page's theme
+ * colours. The chapter is drawn in an iframe, which inherits none of the page's fonts or CSS
+ * variables, so they are copied in here.
+ */
 function readerCss(size: number): string {
   const theme = getComputedStyle(document.documentElement);
   const bg = theme.getPropertyValue('--bg');
   const ink = theme.getPropertyValue('--ink');
-  return `html, body, p { font-size: ${size}px !important; }
-html, body { background: ${bg} !important; color: ${ink} !important; }`;
+  // Literata, loaded by next/font in the root layout: `"Literata", "Literata Fallback"`.
+  const font = theme.getPropertyValue('--font-literata').trim();
+  readingFontFaces ??= font ? fontFaces(familyNames(font)) : '';
+  const family = font ? `${font}, Georgia, serif` : 'Georgia, serif';
+  return `${readingFontFaces}
+html, body, p { font-size: ${size}px !important; }
+html, body { background: ${bg} !important; color: ${ink} !important; }
+html, body { font-family: ${family} !important; line-height: ${LINE_HEIGHT} !important; }
+p, li, blockquote, dd, dt { font-family: inherit !important; line-height: inherit !important; }`;
+}
+
+/** Applies the reading styles, and a line width that follows the font size, to the view. */
+function styleReader(view: View, size: number) {
+  // foliate-js lays the chapter out in columns no wider than `max-inline-size` (in px only), and
+  // puts two side by side when they fit; one column keeps the line length readable on a desktop.
+  view.renderer.setAttribute('max-column-count', '1');
+  view.renderer.setAttribute('max-inline-size', `${Math.round(LINE_WIDTH_EM * size)}px`);
+  view.renderer.setStyles(readerCss(size));
 }
 
 /** The range's box in the reader's viewport (the section is drawn in an iframe). */
@@ -210,7 +265,7 @@ export default function EpubReader({
       await view.open(fileUrl);
       if (cancelled) return;
       view.renderer.setAttribute('flow', 'paginated');
-      view.renderer.setStyles(readerCss(fontSizeRef.current));
+      styleReader(view, fontSizeRef.current);
       await view.init({ lastLocation: initialCfi, showTextStart: true });
       viewRef.current = view;
       syncAnnotations(view);
@@ -232,7 +287,7 @@ export default function EpubReader({
     } catch {
       // the choice just won't be remembered
     }
-    viewRef.current?.renderer.setStyles(readerCss(size));
+    if (viewRef.current) styleReader(viewRef.current, size);
   }
 
   return (

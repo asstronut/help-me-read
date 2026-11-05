@@ -35,7 +35,17 @@ async function chapterFrame(page: Page): Promise<Frame> {
 async function visibleMarkers(page: Page): Promise<string[]> {
   const frame = await chapterFrame(page);
   return frame.evaluate(() => {
-    const top = window.top!;
+    // The chapter's iframe is as wide as all its pages; the elements around it clip it to the
+    // current page, so the next page can sit inside the window and still be hidden.
+    const view = { left: 0, top: 0, right: window.top!.innerWidth, bottom: window.top!.innerHeight };
+    for (let el = window.frameElement?.parentElement; el; el = el.parentElement) {
+      if (getComputedStyle(el).overflow === 'visible') continue;
+      const r = el.getBoundingClientRect();
+      view.left = Math.max(view.left, r.left);
+      view.top = Math.max(view.top, r.top);
+      view.right = Math.min(view.right, r.right);
+      view.bottom = Math.min(view.bottom, r.bottom);
+    }
     const offset = window.frameElement!.getBoundingClientRect();
     const seen: string[] = [];
     for (const p of document.querySelectorAll('p')) {
@@ -47,7 +57,8 @@ async function visibleMarkers(page: Page): Promise<string[]> {
       range.setEnd(node, 1);
       const r = range.getBoundingClientRect();
       const left = r.left + offset.left;
-      if (left >= 0 && left + r.width <= top.innerWidth && r.top >= 0 && r.bottom <= top.innerHeight)
+      const top = r.top + offset.top;
+      if (left >= view.left && left + r.width <= view.right && top >= view.top && top + r.height <= view.bottom)
         seen.push(marker);
     }
     return seen;
@@ -127,6 +138,26 @@ test('the font size choice applies to the text and survives a reload', async ({ 
 
   await page.reload();
   await expect.poll(() => paragraphFontSize(page)).toBe('24px');
+});
+
+test('the text is set in Literata with a line height of 1.7', async ({ page }) => {
+  const id = await addSampleEpub(page);
+  await page.goto(`/read/${id}`);
+  const frame = await chapterFrame(page);
+  await expect(frame.locator('p').first()).toBeVisible();
+  const text = await frame.locator('p').first().evaluate(async (p) => {
+    await document.fonts.ready;
+    const style = getComputedStyle(p);
+    return {
+      family: style.fontFamily,
+      lineHeight: parseFloat(style.lineHeight) / parseFloat(style.fontSize),
+      // The font is really there, not just named: the chapter's iframe has its own font list.
+      loaded: document.fonts.check(`${style.fontSize} Literata`),
+    };
+  });
+  expect(text.family).toMatch(/^"?Literata"?,/);
+  expect(text.lineHeight).toBeCloseTo(1.7, 2);
+  expect(text.loaded).toBe(true);
 });
 
 test('the page does not scroll sideways', async ({ page }) => {
