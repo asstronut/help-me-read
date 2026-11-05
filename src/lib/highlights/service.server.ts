@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { AnchorSchema, HighlightColorSchema, SelectionSchema } from '@/lib/selection/schema';
 import type { Database } from '@/lib/supabase/database.types';
-import type { HighlightView } from '@/lib/types';
+import { ACTIONS, type HighlightView } from '@/lib/types';
 
 type Db = SupabaseClient<Database>;
 
@@ -10,26 +10,53 @@ const fail = (status: number, message: string) => Response.json({ message }, { s
 const BOOK_NOT_FOUND = () => fail(404, 'Book not found');
 export const HIGHLIGHT_NOT_FOUND = () => fail(404, 'Highlight not found');
 
-const VIEW_COLUMNS = 'id, kind, color, anchor, note, threads(id)';
+const VIEW_COLUMNS = 'id, book_id, kind, color, anchor, quote, segment_seq, note, threads(id, action)';
 
 type Row = {
   id: string;
+  book_id: string;
   kind: string;
   color: string;
   anchor: unknown;
+  quote: string;
+  segment_seq: number;
   note: string | null;
-  threads: { id: string }[];
+  threads: { id: string; action: string }[];
 };
 
-function toView(row: Row): HighlightView {
+const ActionSchema = z.enum(ACTIONS);
+
+/** The labels of the book's segments with these numbers. (A highlight has no foreign key to its segment.) */
+async function segmentLabels(supabase: Db, bookId: string, seqs: number[]): Promise<Map<number, string>> {
+  if (seqs.length === 0) return new Map();
+  const { data, error } = await supabase
+    .from('segments')
+    .select('seq, label')
+    .eq('book_id', bookId)
+    .in('seq', [...new Set(seqs)]);
+  if (error) throw error;
+  return new Map(data.map((s) => [s.seq, s.label]));
+}
+
+function toView(row: Row, labels: Map<number, string>): HighlightView {
+  const thread = row.threads[0];
   return {
     id: row.id,
     kind: row.kind === 'thread' ? 'thread' : 'note',
     color: HighlightColorSchema.parse(row.color),
     anchor: AnchorSchema.parse(row.anchor),
-    threadId: row.threads[0]?.id ?? null,
+    quote: row.quote,
+    segmentLabel: labels.get(row.segment_seq) ?? null,
+    threadId: thread?.id ?? null,
+    threadAction: thread ? ActionSchema.parse(thread.action) : null,
     note: row.note,
   };
+}
+
+/** Views of one book's highlights, with their segment labels. */
+async function toViews(supabase: Db, bookId: string, rows: Row[]): Promise<HighlightView[]> {
+  const labels = await segmentLabels(supabase, bookId, rows.map((r) => r.segment_seq));
+  return rows.map((r) => toView(r, labels));
 }
 
 async function assertBookVisible(supabase: Db, bookId: string) {
@@ -46,7 +73,7 @@ export async function listHighlights(supabase: Db, bookId: string): Promise<High
     .eq('book_id', bookId)
     .order('created_at', { ascending: true });
   if (error) throw error;
-  return data.map(toView);
+  return toViews(supabase, bookId, data);
 }
 
 export const CreateHighlightSchema = z.object({
@@ -76,7 +103,7 @@ export async function createNoteHighlight(
     .select(VIEW_COLUMNS)
     .single();
   if (error) throw error;
-  return toView(data);
+  return (await toViews(supabase, bookId, [data]))[0];
 }
 
 export const UpdateHighlightSchema = z
@@ -99,7 +126,7 @@ export async function updateHighlight(
     .maybeSingle();
   if (error) throw error;
   if (!data) throw HIGHLIGHT_NOT_FOUND();
-  return toView(data);
+  return (await toViews(supabase, data.book_id, [data]))[0];
 }
 
 /** Deletes the highlight; a thread highlight takes its thread and messages with it. */

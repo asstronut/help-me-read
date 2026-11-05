@@ -7,7 +7,10 @@ test.use({ storageState: 'tests/e2e/.auth/owner.json' });
  * A book stored from a fixture, without going through the library UI. contents.epub and
  * contents.pdf have two-level contents (see tests/fixtures/make-fixtures.ts); sample.pdf has none.
  */
-async function addBook(page: Page, fixture: 'contents.epub' | 'contents.pdf' | 'sample.pdf'): Promise<string> {
+async function addBook(
+  page: Page,
+  fixture: 'contents.epub' | 'contents.pdf' | 'sample.pdf',
+): Promise<string> {
   const format = fixture.endsWith('.pdf') ? 'pdf' : 'epub';
   const created = await page.request.post('/api/books', {
     data: { title: 'Contents Book', author: null, format, sizeBytes: 100 },
@@ -82,7 +85,10 @@ test('a PDF lists its bookmarks, goes to their pages and follows the page', asyn
   await page.goto(`/read/${bookId}`);
   await openContents(page);
 
-  await expect(contents(page).getByRole('button', { name: 'Part One' })).toHaveAttribute('aria-expanded', 'true');
+  await expect(contents(page).getByRole('button', { name: 'Part One' })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  );
   await expect(contents(page).getByRole('button', { name: 'Chapter 1' })).toHaveAttribute(
     'aria-current',
     'location',
@@ -143,4 +149,28 @@ test('on a wide window the contents stay open beside the book, and fold to ☰ w
   await expect(page.getByLabel('Page number')).toHaveValue('1');
   // Choosing closes the list over the book.
   await expect(chapterOne).toBeHidden();
+});
+
+test('a side panel takes the room on the right: the contents fold to ☰ while it is open', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop', 'the rail is for wide windows');
+  const bookId = await addBook(page, 'contents.pdf');
+  await page.goto(`/read/${bookId}`);
+  const button = page.getByRole('button', { name: 'Contents' });
+  const chapterOne = contents(page).getByRole('button', { name: 'Chapter 1' });
+  await expect(chapterOne).toBeVisible();
+
+  await page.getByRole('button', { name: 'Highlights and threads' }).click();
+  await expect(page.getByRole('complementary', { name: 'In this book' })).toBeVisible();
+  await expect(button).toHaveAttribute('aria-expanded', 'false');
+  await expect(chapterOne).toBeHidden();
+  // The ☰ button still opens the list, over the book.
+  await button.click();
+  await contents(page).getByRole('button', { name: 'Chapter 2' }).click();
+  await expect(page.getByLabel('Page number')).toHaveValue('3');
+  await expect(chapterOne).toBeHidden();
+
+  await page.getByRole('button', { name: 'Close panel' }).click();
+  await expect(chapterOne).toBeVisible();
 });

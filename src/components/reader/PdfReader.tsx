@@ -9,6 +9,7 @@ import { capturePdfSelection } from '@/lib/selection/capture-pdf';
 import { watchTaps } from '@/lib/selection/tap';
 import { watchSelection } from '@/lib/selection/watch';
 import type { HighlightView, ReaderSelection } from '@/lib/types';
+import type { ReaderControls } from './reader-controls';
 import { ContentsOutline, ContentsRail } from './ContentsOutline';
 import { PdfHighlightLayer, highlightsAt } from './PdfHighlightLayer';
 import { PdfPageBar } from './PdfPageBar';
@@ -33,6 +34,12 @@ type Props = {
   onHighlightTap: (highlights: HighlightView[]) => void;
   /** False while a side panel takes the room beside the book. */
   roomBeside: boolean;
+  highlightsOpen: boolean;
+  onHighlights: () => void;
+  /** Filled in by the reader, so the page around it can move it to a highlight. */
+  controlsRef: { current: ReaderControls | null };
+  /** The PDF's bookmarks, once read (the highlights panel groups by them). */
+  onContents: (items: ContentsItem[]) => void;
 };
 
 const MAX_FIT_WIDTH = 800;
@@ -71,6 +78,10 @@ export default function PdfReader({
   highlights,
   onHighlightTap,
   roomBeside,
+  highlightsOpen,
+  onHighlights,
+  controlsRef,
+  onContents,
 }: Props) {
   const [numPages, setNumPages] = useState(0);
   // The PDF's bookmarks; null until they are read.
@@ -124,10 +135,14 @@ export default function PdfReader({
     scrollRef.current?.querySelector(`[data-slot="${target}"]`)?.scrollIntoView({ block: 'start' });
   }, []);
 
-  function goTo(target: number) {
+  /** Goes to the page; with `y` (0 to 1 down the page), scrolls that point a third of the way down the view. */
+  function goTo(target: number, y?: number) {
     const next = Math.min(Math.max(target, 1), Math.max(numPages, 1));
     setPage(next);
-    scrollToPage(next);
+    const scroller = scrollRef.current;
+    const slot = scroller?.querySelector<HTMLElement>(`[data-slot="${next}"]`);
+    if (y === undefined || !scroller || !slot) scrollToPage(next);
+    else scroller.scrollTop = slot.offsetTop + y * slot.offsetHeight - scroller.clientHeight / 3;
   }
   const goToRef = useRef(goTo);
   useEffect(() => {
@@ -135,6 +150,17 @@ export default function PdfReader({
   });
 
   useEffect(() => listenForPageKeys(window, (dir) => goToRef.current(pageRef.current + dir)), []);
+
+  useEffect(() => {
+    controlsRef.current = {
+      goTo: (anchor) => {
+        if (anchor.format === 'pdf') goToRef.current(anchor.page, anchor.rects[0]?.y);
+      },
+    };
+    return () => {
+      controlsRef.current = null;
+    };
+  }, [controlsRef]);
 
   /** A tap on a highlight; the end of a drag (a selection being made) is not a tap. */
   function onClick(e: MouseEvent) {
@@ -181,6 +207,8 @@ export default function PdfReader({
         title={title}
         chapter={current?.label ?? null}
         contents={<ContentsOutline {...outline} placement="bar" />}
+        highlightsOpen={highlightsOpen}
+        onHighlights={onHighlights}
       />
       {status}
       {/* The pages start at the top of their column: line the ☰ icon (13px into its box) up with them. */}
@@ -203,7 +231,10 @@ export default function PdfReader({
               loading={<p className="p-4 text-sm opacity-70">Loading…</p>}
               error=""
               onLoadSuccess={(doc) => {
-                void pdfContents(doc).then(setContents);
+                void pdfContents(doc).then((items) => {
+                setContents(items);
+                onContents(items);
+              });
                 return doc.getPage(1).then((first) => {
                   const { width, height } = first.getViewport({ scale: 1 });
                   setAspect(height / width);

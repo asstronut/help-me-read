@@ -14,6 +14,7 @@ import { captureEpubSelection } from '@/lib/selection/capture-epub';
 import { watchTaps } from '@/lib/selection/tap';
 import { watchSelection } from '@/lib/selection/watch';
 import type { HighlightView, ReaderSelection } from '@/lib/types';
+import type { ReaderControls } from './reader-controls';
 import { ContentsOutline, ContentsRail } from './ContentsOutline';
 import { HIGHLIGHT_HEX, HIGHLIGHT_INKS } from './highlight-colors';
 import { PageTurnEdge } from './PageTurnEdge';
@@ -34,6 +35,10 @@ type Props = {
   onHighlightTap: (highlights: HighlightView[]) => void;
   /** False while a side panel takes the room beside the book. */
   roomBeside: boolean;
+  highlightsOpen: boolean;
+  onHighlights: () => void;
+  /** Filled in by the reader, so the page around it can move it to a highlight. */
+  controlsRef: { current: ReaderControls | null };
 };
 
 /** foliate puts the text this far below the top of its box (the paginator's `--_margin`). */
@@ -152,6 +157,9 @@ export default function EpubReader({
   highlights,
   onHighlightTap,
   roomBeside,
+  highlightsOpen,
+  onHighlights,
+  controlsRef,
 }: Props) {
   const [fontSize, setFontSize] = useState(readFontSize);
   const [error, setError] = useState(false);
@@ -197,6 +205,17 @@ export default function EpubReader({
   useEffect(() => {
     if (viewRef.current) syncAnnotations(viewRef.current);
   }, [highlights, syncAnnotations]);
+
+  useEffect(() => {
+    controlsRef.current = {
+      goTo: (anchor) => {
+        if (anchor.format === 'epub') void viewRef.current?.goTo(anchor.cfi);
+      },
+    };
+    return () => {
+      controlsRef.current = null;
+    };
+  }, [controlsRef]);
 
   // The keys work on the page around the book; the chapter's own document gets them on load.
   useEffect(() => listenForPageKeys(window, turnPage), [turnPage]);
@@ -320,6 +339,8 @@ export default function EpubReader({
         title={title}
         chapter={contents ? (findItem(contents.items, currentId)?.item.label ?? null) : null}
         contents={<ContentsOutline {...outline} placement="bar" />}
+        highlightsOpen={highlightsOpen}
+        onHighlights={onHighlights}
       >
         <ReadingSettings fontSize={fontSize} onFontSize={chooseFontSize} />
       </ReaderTopBar>

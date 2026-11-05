@@ -36,6 +36,12 @@ export type HighlightView = {
   kind: 'note' | 'thread';
   color: HighlightColor;
   anchor: Anchor;
+  /** The highlighted text. */
+  quote: string;
+  /** The label of the segment (chapter, or "Page n" in a PDF) it is in; null until the book's text is prepared. */
+  segmentLabel: string | null;
   threadId: string | null;
+  /** The thread's action, for a thread highlight. */
+  threadAction: Action | null;
   note: string | null;
 };

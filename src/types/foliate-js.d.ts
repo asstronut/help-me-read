@@ -44,6 +44,11 @@ declare module 'foliate-js/view.js' {
   export type ShowAnnotationDetail = { value: string };
 }
 
+declare module 'foliate-js/epubcfi.js' {
+  /** Orders two CFIs by their place in the book: negative, zero or positive. */
+  export function compare(a: string, b: string): number;
+}
+
 declare module 'foliate-js/overlayer.js' {
   import type { DrawFn } from 'foliate-js/view.js';
   export class Overlayer {

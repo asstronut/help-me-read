@@ -14,7 +14,10 @@ type HighlightView = {
   kind: 'note' | 'thread';
   color: string;
   anchor: unknown;
+  quote: string;
+  segmentLabel: string | null;
   threadId: string | null;
+  threadAction: string | null;
   note: string | null;
 };
 
@@ -43,10 +46,18 @@ async function addNote(bookId: string, color = 'green'): Promise<HighlightView> 
 }
 
 describe('highlights', () => {
-  test('a note highlight is created and listed with its anchor', async () => {
+  test('a note highlight is created and listed with its anchor, text and segment label', async () => {
     const bookId = await newBook(api, 'pdf', PDF_SEGMENTS);
     const created = await addNote(bookId);
-    expect(created).toMatchObject({ kind: 'note', color: 'green', threadId: null, note: null });
+    expect(created).toMatchObject({
+      kind: 'note',
+      color: 'green',
+      quote: 'Final page.',
+      segmentLabel: 'Page 3',
+      threadId: null,
+      threadAction: null,
+      note: null,
+    });
 
     const listed = await listHighlights(bookId);
     expect(listed).toEqual([created]);
@@ -62,8 +73,27 @@ describe('highlights', () => {
       scope: 'page',
     });
     expect(await listHighlights(bookId)).toEqual([
-      expect.objectContaining({ id: highlightId, kind: 'thread', color: 'yellow', threadId }),
+      expect.objectContaining({
+        id: highlightId,
+        kind: 'thread',
+        color: 'yellow',
+        quote: 'steep',
+        segmentLabel: 'Page 1',
+        threadId,
+        threadAction: 'define',
+      }),
     ]);
+  });
+
+  test('the segment label is null until the text is prepared', async () => {
+    const bookId = await newBook(api, 'pdf', null);
+    const created = await addNote(bookId);
+    expect(created).toMatchObject({ quote: 'Final page.', segmentLabel: null });
+    expect(await listHighlights(bookId)).toEqual([created]);
+
+    const posted = await api.post(`/api/books/${bookId}/segments`, { segments: PDF_SEGMENTS, done: true });
+    expect(posted.status).toBe(204);
+    expect((await listHighlights(bookId))[0].segmentLabel).toBe('Page 3');
   });
 
   test('PATCH changes the colour and the note', async () => {
@@ -72,7 +102,13 @@ describe('highlights', () => {
 
     const res = await api.patch(`/api/highlights/${id}`, { note: 'ok', color: 'pink' });
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ id, color: 'pink', note: 'ok' });
+    expect(await res.json()).toMatchObject({
+      id,
+      color: 'pink',
+      note: 'ok',
+      quote: 'Final page.',
+      segmentLabel: 'Page 3',
+    });
     expect((await listHighlights(bookId))[0]).toMatchObject({ color: 'pink', note: 'ok' });
   });
 

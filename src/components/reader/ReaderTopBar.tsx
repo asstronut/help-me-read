@@ -11,12 +11,15 @@ type Props = {
   chapter?: string | null;
   /** The ☰ contents button, shown here on a phone (on wider screens it sits beside the book). */
   contents?: ReactNode;
+  /** Whether the highlights and threads panel is open, and the bookmark button that opens and closes it. */
+  highlightsOpen: boolean;
+  onHighlights: () => void;
   /** The reader's controls on the right, such as Aa (before the bookmark button). */
   children?: ReactNode;
 };
 
 /** The bar above the book: back to the Library, the book's title, and the reader's own controls. */
-export function ReaderTopBar({ title, chapter, contents, children }: Props) {
+export function ReaderTopBar({ title, chapter, contents, highlightsOpen, onHighlights, children }: Props) {
   return (
     <header className="flex items-center gap-2 px-2 py-1 text-[13px] text-muted sm:gap-4 sm:px-7 sm:py-4">
       {/* The two sides share the space equally, so the title stays centred on the page. */}
@@ -46,17 +49,7 @@ export function ReaderTopBar({ title, chapter, contents, children }: Props) {
       </div>
       <div className="flex flex-1 basis-0 justify-end gap-1">
         {children}
-        {/*
-          A placeholder: this will open the highlights and threads panel (phase 4, step 16).
-          aria-disabled rather than disabled, so it can still be focused and a screen reader
-          says it is unavailable.
-        */}
-        <IconButton
-          aria-label="Highlights and threads"
-          aria-disabled="true"
-          title="Highlights and threads: coming soon"
-          className="aria-disabled:cursor-default aria-disabled:opacity-50 aria-disabled:hover:bg-transparent aria-disabled:hover:text-muted"
-        >
+        <IconButton aria-label="Highlights and threads" aria-pressed={highlightsOpen} onClick={onHighlights}>
           <BookmarkIcon />
         </IconButton>
       </div>
