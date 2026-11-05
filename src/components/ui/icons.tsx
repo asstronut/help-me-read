@@ -96,3 +96,10 @@ export const ArrowUpIcon = (props: IconProps) => (
     <path d="M12 19V5M6 11l6-6 6 6" />
   </Icon>
 );
+
+/** A tick: done. */
+export const CheckIcon = (props: IconProps) => (
+  <Icon strokeWidth={2} {...props}>
+    <path d="M5 12l5 5 9-10" />
+  </Icon>
+);

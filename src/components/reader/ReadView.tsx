@@ -3,6 +3,10 @@
 import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ThreadPanel } from '@/components/thread/ThreadPanel';
+import { InlineAlert } from '@/components/ui/InlineAlert';
+import { Toast } from '@/components/ui/Toast';
+import { cn } from '@/components/ui/cn';
+import { CheckIcon } from '@/components/ui/icons';
 import { e2eHooksEnabled } from '@/lib/test-mode';
 import type {
   Action,
@@ -145,12 +149,10 @@ export function ReadView({ bookId, threadId, at }: Props) {
 
   if (failed) {
     return (
-      <p role="alert" className="p-4 text-sm text-red-600">
-        Could not open this book.
-      </p>
+      <InlineAlert className="m-4">Could not open this book.</InlineAlert>
     );
   }
-  if (!loaded) return <p className="p-4 text-sm opacity-70">Loading…</p>;
+  if (!loaded) return <p className="p-4 text-sm text-muted">Loading…</p>;
 
   const onPick = (item: MenuItem) => {
     setCurrent(null);
@@ -234,15 +236,27 @@ export function ReadView({ bookId, threadId, at }: Props) {
           onClose={() => setEditing(null)}
         />
       )}
-      {problem && (
-        <p role="alert" className="fixed top-12 left-1/2 z-50 -translate-x-1/2 rounded bg-red-600 px-3 py-1 text-sm text-white">
-          {problem}
-        </p>
-      )}
-      {notice && (
-        <p role="status" className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded bg-gray-900 px-3 py-1 text-sm text-white">
-          {notice}
-        </p>
+      {(problem || notice) && (
+        // Centred over the book (beside the thread panel on desktop), just above the progress
+        // footer; on a PDF, above the floating page bar too.
+        <div
+          className={cn(
+            'pointer-events-none fixed inset-x-0 z-50 flex flex-col items-center gap-2 px-4',
+            loaded.format === 'pdf' ? 'bottom-[116px] sm:bottom-[144px]' : 'bottom-14 sm:bottom-[76px]',
+            open && 'md:pr-[420px]',
+          )}
+        >
+          {problem && (
+            <div className="pointer-events-auto max-w-md rounded-xl bg-surface font-sans shadow-[0_4px_16px_var(--shadow)]">
+              <InlineAlert>{problem}</InlineAlert>
+            </div>
+          )}
+          {notice && (
+            <Toast icon={<CheckIcon size={14} />} className="pointer-events-auto font-sans">
+              {notice}
+            </Toast>
+          )}
+        </div>
       )}
       {panel}
     </>
