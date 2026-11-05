@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import { HIGHLIGHT_COLORS, type HighlightColor, type HighlightView } from '@/lib/types';
-import { HIGHLIGHT_FILLS } from './highlight-colors';
+import { HIGHLIGHT_HEX } from './highlight-colors';
 
 type Props = {
   highlight: HighlightView;
@@ -66,7 +66,7 @@ export function NoteEditor({ highlight, onSaved, onDeleted, onClose }: Props) {
             aria-label={NAMES[c]}
             aria-pressed={c === color}
             onClick={() => setColor(c)}
-            style={{ backgroundColor: HIGHLIGHT_FILLS[c] }}
+            style={{ backgroundColor: HIGHLIGHT_HEX[c] }}
             className="size-6 rounded-full border border-foreground/20 aria-pressed:ring-2 aria-pressed:ring-foreground"
           />
         ))}

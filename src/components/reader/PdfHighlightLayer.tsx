@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { HighlightView, Rect } from '@/lib/types';
-import { HIGHLIGHT_FILLS, HIGHLIGHT_INKS } from './highlight-colors';
+import { HIGHLIGHT_HEX, HIGHLIGHT_INKS } from './highlight-colors';
 
 const pdfRects = (h: HighlightView): Rect[] => (h.anchor.format === 'pdf' ? h.anchor.rects : []);
 
@@ -22,7 +22,7 @@ export function PdfHighlightLayer({ highlights }: { highlights: HighlightView[] 
             width: percent(r.w),
             height: percent(r.h),
             ...(h.kind === 'note'
-              ? { backgroundColor: HIGHLIGHT_FILLS[h.color], opacity: 0.6 }
+              ? { backgroundColor: HIGHLIGHT_HEX[h.color], opacity: 'var(--highlight-alpha)' }
               : { borderBottom: `2px dotted ${HIGHLIGHT_INKS[h.color]}` }),
           };
           return (
