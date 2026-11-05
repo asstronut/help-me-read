@@ -1,11 +1,12 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { ChevronLeftIcon } from '@/components/ui/icons';
+import { IconButton } from '@/components/ui/IconButton';
+import { BookmarkIcon, ChevronLeftIcon } from '@/components/ui/icons';
 
 type Props = {
   /** The book's title. (The current chapter joins it once the reader knows the contents.) */
   title: string;
-  /** The reader's controls on the right, such as Aa. */
+  /** The reader's controls on the right, such as Aa (before the bookmark button). */
   children?: ReactNode;
 };
 
@@ -24,7 +25,22 @@ export function ReaderTopBar({ title, children }: Props) {
         </Link>
       </div>
       <h1 className="min-w-0 truncate text-center text-[11px] tracking-[0.08em] uppercase">{title}</h1>
-      <div className="flex flex-1 basis-0 justify-end gap-1">{children}</div>
+      <div className="flex flex-1 basis-0 justify-end gap-1">
+        {children}
+        {/*
+          A placeholder: this will open the highlights and threads panel (phase 4, step 16).
+          aria-disabled rather than disabled, so it can still be focused and a screen reader
+          says it is unavailable.
+        */}
+        <IconButton
+          aria-label="Highlights and threads"
+          aria-disabled="true"
+          title="Highlights and threads: coming soon"
+          className="aria-disabled:cursor-default aria-disabled:opacity-50 aria-disabled:hover:bg-transparent aria-disabled:hover:text-muted"
+        >
+          <BookmarkIcon />
+        </IconButton>
+      </div>
     </header>
   );
 }
