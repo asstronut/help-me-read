@@ -1,6 +1,6 @@
 # UI makeover: build order
 
-The design lives on the "Help Me Read — UI Makeover" canvas (claude.ai artifact). This plan turns it into a sequence of small pull requests, each shippable on its own and each leaving `npm run typecheck`, `npm run test:api` and `npm run e2e` green.
+The design lives on the "Help Me Read — UI Makeover" canvas (claude.ai artifact). This plan turns it into a sequence of phases. **Each phase is one pull request**, with one commit per step, so each step can still be reviewed on its own. Each PR is shippable on its own and leaves `npm run typecheck`, `npm run test:api` and `npm run e2e` green. (One PR per phase rather than per step keeps CI runs down: every PR push and every merge to `master` runs the full suite, about 10 minutes.)
 
 **Scope:** desktop first, tablet second. There are no phone designs, but the e2e suite has a phone project, so every change must still work at phone width (stacked, not designed).
 
