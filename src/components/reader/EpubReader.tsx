@@ -41,10 +41,10 @@ function readFontSize(): number {
 /** Font size, and the page's theme colours (the chapter is drawn in an iframe that does not inherit them). */
 function readerCss(size: number): string {
   const theme = getComputedStyle(document.documentElement);
-  const background = theme.getPropertyValue('--background');
-  const foreground = theme.getPropertyValue('--foreground');
+  const bg = theme.getPropertyValue('--bg');
+  const ink = theme.getPropertyValue('--ink');
   return `html, body, p { font-size: ${size}px !important; }
-html, body { background: ${background} !important; color: ${foreground} !important; }`;
+html, body { background: ${bg} !important; color: ${ink} !important; }`;
 }
 
 /** The range's box in the reader's viewport (the section is drawn in an iframe). */

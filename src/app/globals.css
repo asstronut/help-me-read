@@ -1,32 +1,93 @@
 @import "tailwindcss";
 
-/* The theme is a class on <html>, set on the server from the user's settings. */
+/*
+ * Theme tokens, from the Style reference board of the UI makeover design.
+ * The theme is a class on <html>, set on the server from the user's settings.
+ *
+ *   bg       the page behind everything
+ *   surface  floating things: menus, inputs, toasts
+ *   panel    side panels
+ *   chip     a pressed or selected control
+ *   ink      text
+ *   muted    secondary text and icons
+ *   rule     borders and dividers
+ *   accent   links and the thread underline
+ *   danger   destructive actions and errors (danger-tint behind an error message)
+ *   shadow   the colour of a floating surface's shadow
+ *   highlight-alpha  how strong a note highlight's tint is over the text
+ */
 :root,
 .light {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-.dark {
-  --background: #0a0a0a;
-  --foreground: #ededed;
+  --bg: #fbfaf7;
+  --surface: #ffffff;
+  --panel: #f6f4ef;
+  --chip: #efece6;
+  --ink: #1f1d1a;
+  --muted: #6b665e;
+  --rule: #e2ded5;
+  --accent: #3d5a80;
+  --accent-tint: rgb(61 90 128 / 0.16);
+  --danger: #a3402c;
+  --danger-tint: rgb(163 64 44 / 0.08);
+  --shadow: rgb(31 29 26 / 0.12);
+  --highlight-alpha: 0.38;
 }
 
 .sepia {
-  --background: #f4ecd8;
-  --foreground: #5b4636;
+  --bg: #f4ecd8;
+  --surface: #faf4e6;
+  --panel: #efe5cd;
+  --chip: #eadfc6;
+  --ink: #3e3226;
+  --muted: #6b5843;
+  --rule: #dccdae;
+  --accent: #8a5a34;
+  --accent-tint: rgb(138 90 52 / 0.16);
+  --danger: #9a3a26;
+  --danger-tint: rgb(154 58 38 / 0.1);
+  --shadow: rgb(62 50 38 / 0.14);
+  --highlight-alpha: 0.38;
+}
+
+.dark {
+  --bg: #121212;
+  --surface: #1e1d1c;
+  --panel: #181817;
+  --chip: #2e2c2a;
+  --ink: #dad6cf;
+  --muted: #9a958c;
+  --rule: #34322f;
+  --accent: #9db4d3;
+  --accent-tint: rgb(157 180 211 / 0.18);
+  --danger: #e59a86;
+  --danger-tint: rgb(229 154 134 / 0.12);
+  --shadow: rgb(0 0 0 / 0.5);
+  --highlight-alpha: 0.26;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-panel: var(--panel);
+  --color-chip: var(--chip);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-rule: var(--rule);
+  --color-accent: var(--accent);
+  --color-accent-tint: var(--accent-tint);
+  --color-danger: var(--danger);
+  --color-danger-tint: var(--danger-tint);
+  --color-shadow: var(--shadow);
+  /* The old names, until every component has moved to the tokens above. */
+  --color-background: var(--bg);
+  --color-foreground: var(--ink);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--bg);
+  color: var(--ink);
   font-family: Arial, Helvetica, sans-serif;
 }
 
