@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/TextLayer.css';
+import { listenForPageKeys } from '@/lib/reader/page-keys';
 import { capturePdfSelection } from '@/lib/selection/capture-pdf';
 import { watchTaps } from '@/lib/selection/tap';
 import { watchSelection } from '@/lib/selection/watch';
@@ -120,6 +121,12 @@ export default function PdfReader({
     setPage(next);
     scrollToPage(next);
   }
+  const goToRef = useRef(goTo);
+  useEffect(() => {
+    goToRef.current = goTo;
+  });
+
+  useEffect(() => listenForPageKeys(window, (dir) => goToRef.current(pageRef.current + dir)), []);
 
   /** A tap on a highlight; the end of a drag (a selection being made) is not a tap. */
   function onClick(e: MouseEvent) {

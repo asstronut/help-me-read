@@ -7,6 +7,7 @@ import type {
   ShowAnnotationDetail,
   View,
 } from 'foliate-js/view.js';
+import { listenForPageKeys, type PageTurn } from '@/lib/reader/page-keys';
 import { captureEpubSelection } from '@/lib/selection/capture-epub';
 import { watchTaps } from '@/lib/selection/tap';
 import { watchSelection } from '@/lib/selection/watch';
@@ -105,6 +106,11 @@ export default function EpubReader({
     highlightsRef.current = highlights;
   });
 
+  // Stable (refs only), so the key listeners never need replacing.
+  const turnPage = useCallback((dir: PageTurn) => {
+    void (dir === 1 ? viewRef.current?.next() : viewRef.current?.prev());
+  }, []);
+
   /** Brings the view's annotations in line with the current highlights. */
   const syncAnnotations = useCallback((view: View) => {
     const next = byCfi(highlightsRef.current);
@@ -122,6 +128,9 @@ export default function EpubReader({
   useEffect(() => {
     if (viewRef.current) syncAnnotations(viewRef.current);
   }, [highlights, syncAnnotations]);
+
+  // The keys work on the page around the book; the chapter's own document gets them on load.
+  useEffect(() => listenForPageKeys(window, turnPage), [turnPage]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -152,9 +161,12 @@ export default function EpubReader({
         const unwatchTaps = watchTaps(doc, (tap) => {
           lastReleaseWasTap = tap;
         });
+        // A click in the text moves the focus into the chapter's iframe, so its keys come from there.
+        const unwatchKeys = listenForPageKeys(doc, turnPage);
         unwatch = () => {
           unwatchSelection();
           unwatchTaps();
+          unwatchKeys();
         };
       });
       // Each shown section gets a fresh overlay: draw its highlights again.
@@ -204,7 +216,7 @@ export default function EpubReader({
       view?.close();
       view?.remove();
     };
-  }, [bookId, fileUrl, initialCfi, save, syncAnnotations]);
+  }, [bookId, fileUrl, initialCfi, save, syncAnnotations, turnPage]);
 
   function chooseFontSize(size: number) {
     setFontSize(size);
@@ -228,13 +240,13 @@ export default function EpubReader({
         </p>
       )}
       <div className="group flex min-h-0 flex-1 sm:px-7">
-        <PageTurnEdge direction="previous" onClick={() => void viewRef.current?.prev()} />
+        <PageTurnEdge direction="previous" onClick={() => turnPage(-1)} />
         {/* Note highlights are drawn by foliate at this opacity: the theme's tint strength. */}
         <div
           ref={hostRef}
           className="min-w-0 flex-1 [--overlayer-highlight-opacity:var(--highlight-alpha)]"
         />
-        <PageTurnEdge direction="next" onClick={() => void viewRef.current?.next()} />
+        <PageTurnEdge direction="next" onClick={() => turnPage(1)} />
       </div>
     </div>
   );

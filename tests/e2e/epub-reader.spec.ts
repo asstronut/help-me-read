@@ -83,6 +83,27 @@ test('the reader returns to the saved position after a reload', async ({ page })
   await expect.poll(() => visibleMarkers(page)).toContain(before[0]);
 });
 
+test('the keyboard turns pages, also once the text has been clicked', async ({ page }) => {
+  const id = await addSampleEpub(page);
+  await page.goto(`/read/${id}`);
+  await expect.poll(() => visibleMarkers(page)).toContain('P1');
+  // foliate-js ignores a page turn asked for within 100 ms of the previous one.
+  const settle = () => page.waitForTimeout(300);
+
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(() => visibleMarkers(page)).not.toContain('P1');
+  await settle();
+  await page.keyboard.press('PageUp');
+  await expect.poll(() => visibleMarkers(page)).toContain('P1');
+  await settle();
+
+  // A click in the text puts the focus inside the chapter's iframe; the keys still work there.
+  const frame = await chapterFrame(page);
+  await frame.locator('p').first().click();
+  await page.keyboard.press('Space');
+  await expect.poll(() => visibleMarkers(page)).not.toContain('P1');
+});
+
 test('the font size choice applies to the text and survives a reload', async ({ page }) => {
   const id = await addSampleEpub(page);
   await page.goto(`/read/${id}`);
