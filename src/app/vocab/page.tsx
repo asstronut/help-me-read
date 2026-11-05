@@ -67,7 +67,7 @@ export default function VocabPage() {
         </p>
       )}
       {entries?.length === 0 && (
-        <p className="opacity-70">{query ? 'No matching words.' : 'No words yet. Use +Vocab while reading.'}</p>
+        <p className="opacity-70">{query ? 'No matching words.' : 'No words yet. Select a word while reading and choose Vocab.'}</p>
       )}
       {entries && entries.length > 0 && (
         <ul className="divide-y divide-gray-300/50">

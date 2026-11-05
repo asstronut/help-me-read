@@ -9,6 +9,8 @@ import {
   type MenuItem,
   type ReaderSelection,
 } from '@/lib/types';
+import { cn } from '@/components/ui/cn';
+import { PlusIcon } from '@/components/ui/icons';
 import { HIGHLIGHT_HEX } from './highlight-colors';
 
 /** Where the selection is on screen, in viewport pixels. */
@@ -27,8 +29,12 @@ const LABELS: Record<MenuItem, string> = {
   explain: 'Explain',
   simplify: 'Simplify',
   ask: 'Ask…',
-  vocab: '+Vocab',
+  vocab: 'Vocab',
 };
+
+const FOCUS = 'focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent';
+const ACTION = cn('inline-flex h-11 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 hover:bg-chip', FOCUS);
+const Divider = () => <span aria-hidden="true" className="mx-1 hidden h-5 w-px shrink-0 bg-rule sm:block" />;
 
 const GAP = 8;
 
@@ -75,35 +81,47 @@ export function SelectionMenu({ selection, box, onPick, onColor }: Props) {
       aria-label="Selection menu"
       style={style}
       onMouseDown={keepSelection}
-      className="fixed inset-x-0 bottom-0 z-50 flex flex-col gap-2 border-t border-foreground/10 bg-background p-2 text-sm text-foreground shadow-lg sm:inset-x-auto sm:bottom-auto sm:top-(--menu-top) sm:left-(--menu-left) sm:w-max sm:rounded-lg sm:border"
+      className="fixed inset-x-0 bottom-0 z-50 flex flex-col border-t border-rule bg-surface p-1 font-sans text-[13px] whitespace-nowrap text-ink shadow-[0_8px_24px_var(--shadow)] sm:inset-x-auto sm:bottom-auto sm:top-(--menu-top) sm:left-(--menu-left) sm:w-max sm:flex-row sm:items-center sm:rounded-xl sm:border sm:py-0"
     >
       {tooLong ? (
-        <p className="px-2 py-1">Select a shorter passage</p>
+        <p className="flex h-11 items-center px-3 text-muted">Select a shorter passage</p>
       ) : (
         <>
-          <div role="group" aria-label="Highlight colour" className="flex gap-2 px-1">
+          <div role="group" aria-label="Highlight colour" className="flex">
             {HIGHLIGHT_COLORS.map((color) => (
               <button
                 key={color}
                 type="button"
                 aria-label={`Highlight ${color}`}
                 onClick={() => onColor(color)}
-                style={{ backgroundColor: HIGHLIGHT_HEX[color] }}
-                className="size-6 rounded-full border border-foreground/20"
-              />
-            ))}
-          </div>
-          <div role="group" aria-label="Actions" className="flex flex-wrap gap-1">
-            {orderMenu(selection.text).map((item) => (
-              <button
-                key={item}
-                type="button"
-                onClick={() => onPick(item)}
-                className="rounded px-2 py-1 hover:bg-foreground/5"
+                className={cn('flex size-11 cursor-pointer items-center justify-center rounded-lg hover:bg-chip', FOCUS)}
               >
-                {LABELS[item]}
+                <span
+                  aria-hidden="true"
+                  style={{ backgroundColor: HIGHLIGHT_HEX[color] }}
+                  className="size-[18px] rounded-full"
+                />
               </button>
             ))}
+          </div>
+          <Divider />
+          <div role="group" aria-label="Actions" className="flex flex-wrap items-center sm:flex-nowrap">
+            {orderMenu(selection.text).map((item) =>
+              item === 'vocab' ? (
+                <span key={item} className="contents">
+                  <Divider />
+                  {/* The visible "Vocab" is part of the name (WCAG 2.5.3, label in name). */}
+                  <button type="button" aria-label="Save to vocab" onClick={() => onPick(item)} className={ACTION}>
+                    <PlusIcon size={14} strokeWidth={1.8} />
+                    <span>{LABELS[item]}</span>
+                  </button>
+                </span>
+              ) : (
+                <button key={item} type="button" onClick={() => onPick(item)} className={ACTION}>
+                  {LABELS[item]}
+                </button>
+              ),
+            )}
           </div>
         </>
       )}
