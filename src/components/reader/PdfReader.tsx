@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/TextLayer.css';
+import { currentPdfItem, pdfContents, type ContentsItem } from '@/lib/reader/contents';
 import { listenForPageKeys } from '@/lib/reader/page-keys';
 import { capturePdfSelection } from '@/lib/selection/capture-pdf';
 import { watchTaps } from '@/lib/selection/tap';
 import { watchSelection } from '@/lib/selection/watch';
 import type { HighlightView, ReaderSelection } from '@/lib/types';
+import { ContentsOutline, ContentsRail } from './ContentsOutline';
 import { PdfHighlightLayer, highlightsAt } from './PdfHighlightLayer';
 import { PdfPageBar } from './PdfPageBar';
 import { ProgressFooter } from './ProgressFooter';
@@ -29,6 +31,8 @@ type Props = {
   highlights: HighlightView[];
   /** The highlights under a tap, most recent first. */
   onHighlightTap: (highlights: HighlightView[]) => void;
+  /** False while a side panel takes the room beside the book. */
+  roomBeside: boolean;
 };
 
 const MAX_FIT_WIDTH = 800;
@@ -66,8 +70,11 @@ export default function PdfReader({
   onSelection,
   highlights,
   onHighlightTap,
+  roomBeside,
 }: Props) {
   const [numPages, setNumPages] = useState(0);
+  // The PDF's bookmarks; null until they are read.
+  const [contents, setContents] = useState<ContentsItem[] | null>(null);
   // height / width of the first page, used to size pages that are not drawn
   const [aspect, setAspect] = useState(0);
   const [page, setPage] = useState(initialPage);
@@ -158,68 +165,86 @@ export default function PdfReader({
     if (ready) scrollToPage(pageRef.current);
   }, [ready, pageWidth, scrollToPage]);
 
+  const current = contents && currentPdfItem(contents, page);
+  const outline = {
+    items: contents,
+    currentId: current?.id ?? null,
+    onGo: (item: ContentsItem) => {
+      if (item.target && 'page' in item.target) goTo(item.target.page);
+    },
+    emptyText: 'No contents in this PDF',
+  };
+
   return (
     <div className="flex h-dvh flex-col">
-      <ReaderTopBar title={title} />
+      <ReaderTopBar
+        title={title}
+        chapter={current?.label ?? null}
+        contents={<ContentsOutline {...outline} placement="bar" />}
+      />
       {status}
-      <div className="relative min-h-0 flex-1">
-        <div
-          ref={scrollRef}
-          onScroll={onScroll}
-          onClick={onClick}
-          // Room at the bottom so the last page can scroll up clear of the page bar.
-          className="h-full overflow-auto pb-24"
-        >
-          {error && (
-            <p role="alert" className="p-4 text-sm text-red-600">
-              Could not open this PDF.
-            </p>
-          )}
-          <Document
-            file={fileUrl}
-            loading={<p className="p-4 text-sm opacity-70">Loading…</p>}
-            error=""
-            onLoadSuccess={(doc) =>
-              doc.getPage(1).then((first) => {
-                const { width, height } = first.getViewport({ scale: 1 });
-                setAspect(height / width);
-                setNumPages(doc.numPages);
-                setPage((p) => Math.min(p, doc.numPages));
-              }, () => setError(true))
-            }
-            onLoadError={() => setError(true)}
+      {/* The pages start at the top of their column: line the ☰ icon (13px into its box) up with them. */}
+      <ContentsRail {...outline} roomBeside={roomBeside} top={-13} className="sm:gap-6">
+        <div className="relative min-h-0 min-w-0 flex-1">
+          <div
+            ref={scrollRef}
+            onScroll={onScroll}
+            onClick={onClick}
+            // Room at the bottom so the last page can scroll up clear of the page bar.
+            className="h-full overflow-auto pb-24"
           >
-            {ready && (
-              <div className="mx-auto flex w-fit flex-col gap-2">
-                {Array.from({ length: numPages }, (_, i) => i + 1).map((n) => (
-                  <div
-                    key={n}
-                    data-slot={n}
-                    aria-current={n === page ? 'page' : undefined}
-                    style={{ width: pageWidth, minHeight: pageWidth * aspect }}
-                  >
-                    {Math.abs(n - page) <= RENDER_AROUND && (
-                      <Page pageNumber={n} width={pageWidth} renderAnnotationLayer={false}>
-                        <PdfHighlightLayer highlights={highlights.filter((h) => onPdfPage(h, n))} />
-                      </Page>
-                    )}
-                  </div>
-                ))}
-              </div>
+            {error && (
+              <p role="alert" className="p-4 text-sm text-red-600">
+                Could not open this PDF.
+              </p>
             )}
-          </Document>
+            <Document
+              file={fileUrl}
+              loading={<p className="p-4 text-sm opacity-70">Loading…</p>}
+              error=""
+              onLoadSuccess={(doc) => {
+                void pdfContents(doc).then(setContents);
+                return doc.getPage(1).then((first) => {
+                  const { width, height } = first.getViewport({ scale: 1 });
+                  setAspect(height / width);
+                  setNumPages(doc.numPages);
+                  setPage((p) => Math.min(p, doc.numPages));
+                }, () => setError(true));
+              }}
+              onLoadError={() => setError(true)}
+            >
+              {ready && (
+                <div className="mx-auto flex w-fit flex-col gap-2">
+                  {Array.from({ length: numPages }, (_, i) => i + 1).map((n) => (
+                    <div
+                      key={n}
+                      data-slot={n}
+                      aria-current={n === page ? 'page' : undefined}
+                      style={{ width: pageWidth, minHeight: pageWidth * aspect }}
+                    >
+                      {Math.abs(n - page) <= RENDER_AROUND && (
+                        <Page pageNumber={n} width={pageWidth} renderAnnotationLayer={false}>
+                          <PdfHighlightLayer highlights={highlights.filter((h) => onPdfPage(h, n))} />
+                        </Page>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Document>
+          </div>
+          <PdfPageBar
+            page={page}
+            numPages={numPages}
+            onPage={goTo}
+            zoom={zoom}
+            onZoomIn={() => setZoom((z) => clampZoom(z + ZOOM_STEP))}
+            onZoomOut={() => setZoom((z) => clampZoom(z - ZOOM_STEP))}
+            onFitWidth={() => setZoom(1)}
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 sm:bottom-5"
+          />
         </div>
-        <PdfPageBar
-          page={page}
-          numPages={numPages}
-          onPage={goTo}
-          zoom={zoom}
-          onZoomIn={() => setZoom((z) => clampZoom(z + ZOOM_STEP))}
-          onZoomOut={() => setZoom((z) => clampZoom(z - ZOOM_STEP))}
-          onFitWidth={() => setZoom(1)}
-          className="absolute bottom-3 left-1/2 -translate-x-1/2 sm:bottom-5"
-        />
-      </div>
+      </ContentsRail>
       <ProgressFooter fraction={numPages > 0 ? page / numPages : null} />
     </div>
   );

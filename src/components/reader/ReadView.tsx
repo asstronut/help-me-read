@@ -277,6 +277,7 @@ export function ReadView({ bookId, threadId, at }: Props) {
             onSelection={onSelection}
             highlights={highlights}
             onHighlightTap={onHighlightTap}
+            roomBeside={!open}
           />
         </div>
         {menu}
@@ -296,6 +297,7 @@ export function ReadView({ bookId, threadId, at }: Props) {
           onSelection={onSelection}
           highlights={highlights}
           onHighlightTap={onHighlightTap}
+          roomBeside={!open}
         />
       </div>
       {menu}
