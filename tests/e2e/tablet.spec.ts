@@ -91,6 +91,18 @@ async function visibleStarts(page: Page): Promise<{ marker: string; x: number }[
 
 const visibleMarkers = async (page: Page) => (await visibleStarts(page)).map((s) => s.marker);
 
+/**
+ * How many columns the text is in: paragraph starts on screen in the book's left half, and in its
+ * right half. One column of text, centred, starts all its paragraphs in the left half.
+ */
+async function columns(page: Page): Promise<number> {
+  const box = await bookBox(page);
+  const middle = box.x + box.width / 2;
+  const starts = await visibleStarts(page);
+  if (starts.length === 0) return 0;
+  return starts.some((s) => s.x > middle) ? 2 : 1;
+}
+
 /** The book's box: the part of the reader that the tap zones divide in thirds. */
 async function bookBox(page: Page) {
   const box = await page.locator('foliate-view').boundingBox();
@@ -154,11 +166,21 @@ test.beforeEach(async ({ page }) => {
 
 /** A tablet held sideways (an 11-inch iPad), used with a finger. */
 const TABLET_LANDSCAPE = { viewport: { width: 1194, height: 834 }, hasTouch: true };
+const TABLET_PORTRAIT = { viewport: { width: 834, height: 1194 }, hasTouch: true };
 
 test.describe('on a tablet', () => {
   test.use(TABLET_LANDSCAPE);
   // The tablet's size is set here; the phone project's run would only repeat it.
   test.beforeEach(({}, info) => test.skip(info.project.name !== 'desktop', 'the desktop project runs the tablet tests'));
+
+  test('held sideways, the text is in two columns, like an open book', async ({ page }) => {
+    await openBook(page);
+    await expect.poll(() => columns(page)).toBe(2);
+    // The contents stay folded to the ☰ button beside the book, leaving the room to the text.
+    const contents = page.getByRole('button', { name: 'Contents' });
+    await expect(contents).toBeVisible();
+    await expect(contents).toHaveAttribute('aria-expanded', 'false');
+  });
 
   test('a tap on the right third turns the page forward, on the left third back', async ({ page }) => {
     await openBook(page);
@@ -218,6 +240,27 @@ test.describe('on a tablet', () => {
     await expect(menu(page)).toHaveCount(0);
     await settle(page);
     expect(await visibleMarkers(page)).toContain('P1');
+  });
+});
+
+test.describe('on a tablet held upright', () => {
+  test.use(TABLET_PORTRAIT);
+  test.beforeEach(({}, info) => test.skip(info.project.name !== 'desktop', 'the desktop project runs the tablet tests'));
+
+  test('the text is in one column', async ({ page }) => {
+    await openBook(page);
+    await expect.poll(() => columns(page)).toBe(1);
+  });
+});
+
+test.describe('in a wide desktop window', () => {
+  // Wide enough for two columns beside the open contents rail, were it a tablet.
+  test.use({ viewport: { width: 1600, height: 900 } });
+  test.beforeEach(({}, info) => test.skip(info.project.name !== 'desktop', 'the phone project is a touch screen'));
+
+  test('the text stays in one column', async ({ page }) => {
+    await openBook(page);
+    await expect.poll(() => columns(page)).toBe(1);
   });
 });
 

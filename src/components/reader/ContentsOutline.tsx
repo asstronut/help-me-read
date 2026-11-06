@@ -5,7 +5,7 @@ import { IconButton } from '@/components/ui/IconButton';
 import { cn } from '@/components/ui/cn';
 import { ChevronRightIcon, MenuIcon } from '@/components/ui/icons';
 import { findItem, type ContentsItem } from '@/lib/reader/contents';
-import { WIDE, useMediaQuery } from './useMediaQuery';
+import { TOUCH, WIDE, useMediaQuery } from './useMediaQuery';
 
 type Props = {
   /** The book's contents; null while they are being read. */
@@ -48,11 +48,13 @@ type RailProps = Props & {
 /**
  * The book with its contents rail on the left: open (240px) when the window is wide and no side
  * panel needs the room, else just the ☰ button (44px). The same width is kept free on the right,
- * so the book stays centred. On a phone there is no rail (the ☰ button is in the top bar).
+ * so the book stays centred. On a phone there is no rail (the ☰ button is in the top bar). On a
+ * tablet it is just the ☰ button too, so a page held sideways has room for two columns.
  */
 export function ContentsRail({ roomBeside, top, children, className, outlineClassName, ...props }: RailProps) {
   const wide = useMediaQuery(WIDE);
-  const docked = wide && roomBeside;
+  const touch = useMediaQuery(TOUCH);
+  const docked = wide && !touch && roomBeside;
   const [railOpen, setRailOpen] = useState(true);
   const width = docked && railOpen ? RAIL_WIDTH : 44;
   return (

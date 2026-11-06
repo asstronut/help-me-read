@@ -31,7 +31,7 @@ import { ProgressFooter } from './ProgressFooter';
 import { ReaderTopBar } from './ReaderTopBar';
 import { ReadingSettings, TypographyOptions } from './ReadingSettings';
 import type { SelectionBox } from './SelectionMenu';
-import { SM, useMediaQuery } from './useMediaQuery';
+import { SM, TOUCH, useMediaQuery } from './useMediaQuery';
 import { usePositionSaver } from './usePositionSaver';
 
 type Props = {
@@ -62,6 +62,8 @@ type Look = {
   lineWidth: LineWidth;
   /** On a phone the screen, not the line width, limits the text: the width choice sets the side margins. */
   phone: boolean;
+  /** A touch screen: held sideways, it shows two columns side by side, like an open book. */
+  spread: boolean;
 };
 
 /** Each typeface's CSS variable, set on <html> by next/font in the root layout, and its fallbacks. */
@@ -142,8 +144,9 @@ p, li, blockquote, dd, dt { font-family: inherit !important; line-height: inheri
 function styleReader(view: View, look: Look) {
   const width = LINE_WIDTHS[look.lineWidth];
   // foliate-js lays the chapter out in columns no wider than `max-inline-size` (in px only), and
-  // puts two side by side when they fit; one column keeps the line length readable on a desktop.
-  view.renderer.setAttribute('max-column-count', '1');
+  // puts up to `max-column-count` side by side when they fit, in landscape only (its own container
+  // query falls back to one column in portrait). A desktop keeps one column, as designed.
+  view.renderer.setAttribute('max-column-count', look.spread ? '2' : '1');
   view.renderer.setAttribute('max-inline-size', `${Math.round(width.em * look.fontSize)}px`);
   view.renderer.setAttribute('gap', look.phone ? width.phoneGap : DESKTOP_GAP);
   view.renderer.setStyles(readerCss(look));
@@ -206,9 +209,10 @@ export default function EpubReader({
   const [lineSpacing, setLineSpacing] = usePref(PREFS.lineSpacing);
   const [lineWidth, setLineWidth] = usePref(PREFS.lineWidth);
   const phone = !useMediaQuery(SM);
+  const spread = useMediaQuery(TOUCH);
   const look = useMemo<Look>(
-    () => ({ typeface, fontSize, lineSpacing, lineWidth, phone }),
-    [typeface, fontSize, lineSpacing, lineWidth, phone],
+    () => ({ typeface, fontSize, lineSpacing, lineWidth, phone, spread }),
+    [typeface, fontSize, lineSpacing, lineWidth, phone, spread],
   );
   // The chapter copies the theme's colours in, so it is styled again when the theme changes.
   const theme = useShownTheme();
