@@ -19,6 +19,8 @@ export function useMediaQuery(query: string): boolean {
   );
 }
 
+/** Wider than a phone (Tailwind's `sm`). */
+export const SM = '(min-width: 640px)';
 /** Wide enough for the contents outline to sit open beside the book (Tailwind's `lg`). */
 export const WIDE = '(min-width: 1024px)';
 /** Wide enough for the side panels to sit beside the book rather than over it (Tailwind's `md`). */

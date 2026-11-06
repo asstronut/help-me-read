@@ -5,6 +5,7 @@ import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { currentPdfItem, pdfContents, type ContentsItem } from '@/lib/reader/contents';
 import { listenForPageKeys } from '@/lib/reader/page-keys';
+import { PREFS, usePref, type PdfFit } from '@/lib/reader/reading-prefs';
 import { capturePdfSelection } from '@/lib/selection/capture-pdf';
 import { watchTaps } from '@/lib/selection/tap';
 import { watchSelection } from '@/lib/selection/watch';
@@ -15,6 +16,7 @@ import { PdfHighlightLayer, highlightsAt } from './PdfHighlightLayer';
 import { PdfPageBar } from './PdfPageBar';
 import { ProgressFooter } from './ProgressFooter';
 import { ReaderTopBar } from './ReaderTopBar';
+import { PdfOptions, ReadingSettings } from './ReadingSettings';
 import type { SelectionBox } from './SelectionMenu';
 import { usePositionSaver } from './usePositionSaver';
 
@@ -90,7 +92,10 @@ export default function PdfReader({
   const [aspect, setAspect] = useState(0);
   const [page, setPage] = useState(initialPage);
   const [zoom, setZoom] = useState(1);
-  const [containerWidth, setContainerWidth] = useState(0);
+  const [fit, setFit] = usePref(PREFS.pdfFit);
+  const [keepColours, setKeepColours] = usePref(PREFS.keepPdfColours);
+  // The pages' column, inside its padding: the room a fitted page has.
+  const [container, setContainer] = useState({ width: 0, height: 0 });
   const [error, setError] = useState(false);
   const { save, status } = usePositionSaver(bookId);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -105,7 +110,9 @@ export default function PdfReader({
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const observer = new ResizeObserver(([entry]) => setContainerWidth(entry.contentRect.width));
+    const observer = new ResizeObserver(([entry]) =>
+      setContainer({ width: entry.contentRect.width, height: entry.contentRect.height }),
+    );
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
@@ -183,7 +190,15 @@ export default function PdfReader({
     if (visible) setPage(visible);
   }
 
-  const pageWidth = Math.min(containerWidth, MAX_FIT_WIDTH) * zoom;
+  // Whole page also keeps the page's height within the column, above the room left for the page bar.
+  const widthFit = Math.min(container.width, MAX_FIT_WIDTH);
+  const fitted = fit === 'page' && aspect > 0 ? Math.min(widthFit, container.height / aspect) : widthFit;
+  const pageWidth = fitted * zoom;
+
+  function chooseFit(next: PdfFit) {
+    setFit(next);
+    setZoom(1);
+  }
   const ready = numPages > 0 && aspect > 0 && pageWidth > 0;
 
   // Keep the current page in view when the layout first appears and whenever page sizes change.
@@ -202,14 +217,18 @@ export default function PdfReader({
   };
 
   return (
-    <div className="flex h-dvh flex-col">
+    <div className="flex h-dvh flex-col" data-pdf-colours={keepColours ? 'keep' : 'invert'}>
       <ReaderTopBar
         title={title}
         chapter={current?.label ?? null}
         contents={<ContentsOutline {...outline} placement="bar" />}
         highlightsOpen={highlightsOpen}
         onHighlights={onHighlights}
-      />
+      >
+        <ReadingSettings>
+          <PdfOptions fit={fit} onFit={chooseFit} keepColours={keepColours} onKeepColours={setKeepColours} />
+        </ReadingSettings>
+      </ReaderTopBar>
       {status}
       {/* The pages start at the top of their column: line the ☰ icon (13px into its box) up with them. */}
       <ContentsRail {...outline} roomBeside={roomBeside} top={-13} className="sm:gap-6">
@@ -269,9 +288,10 @@ export default function PdfReader({
             numPages={numPages}
             onPage={goTo}
             zoom={zoom}
+            fittedToWidth={fit === 'width' && zoom === 1}
             onZoomIn={() => setZoom((z) => clampZoom(z + ZOOM_STEP))}
             onZoomOut={() => setZoom((z) => clampZoom(z - ZOOM_STEP))}
-            onFitWidth={() => setZoom(1)}
+            onFitWidth={() => chooseFit('width')}
             className="absolute bottom-3 left-1/2 -translate-x-1/2 sm:bottom-5"
           />
         </div>

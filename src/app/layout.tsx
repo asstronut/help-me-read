@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
-import { Geist, Geist_Mono, Literata } from "next/font/google";
+import { Atkinson_Hyperlegible, Geist, Geist_Mono, Literata } from "next/font/google";
 import { currentTheme } from "@/lib/settings/settings.server";
 import { createClient } from "@/lib/supabase/server";
 import "./globals.css";
@@ -23,6 +23,15 @@ const literata = Literata({
   axes: ["opsz"],
 });
 
+// The reader's third typeface, chosen in Aa. Not preloaded: only a reader who picks it downloads it.
+const atkinson = Atkinson_Hyperlegible({
+  variable: "--font-atkinson",
+  subsets: ["latin", "latin-ext"],
+  weight: ["400", "700"],
+  style: ["normal", "italic"],
+  preload: false,
+});
+
 export const metadata: Metadata = {
   title: "help-me-read",
   description: "A single-user reader with AI actions",
@@ -37,7 +46,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${literata.variable} ${theme} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${literata.variable} ${atkinson.variable} ${theme} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

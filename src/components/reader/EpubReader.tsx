@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   DrawAnnotationDetail,
   RelocateDetail,
@@ -10,9 +10,18 @@ import type {
 } from 'foliate-js/view.js';
 import { epubContents, findItem, type ContentsItem, type EpubContents } from '@/lib/reader/contents';
 import { listenForPageKeys, type PageTurn } from '@/lib/reader/page-keys';
+import {
+  PREFS,
+  usePref,
+  type FontSize,
+  type LineSpacing,
+  type LineWidth,
+  type Typeface,
+} from '@/lib/reader/reading-prefs';
 import { captureEpubSelection } from '@/lib/selection/capture-epub';
 import { watchTaps } from '@/lib/selection/tap';
 import { watchSelection } from '@/lib/selection/watch';
+import { useShownTheme } from '@/lib/settings/theme-client';
 import type { HighlightView, ReaderSelection } from '@/lib/types';
 import type { ReaderControls } from './reader-controls';
 import { ContentsOutline, ContentsRail } from './ContentsOutline';
@@ -20,8 +29,9 @@ import { HIGHLIGHT_HEX, HIGHLIGHT_INKS } from './highlight-colors';
 import { PageTurnEdge } from './PageTurnEdge';
 import { ProgressFooter } from './ProgressFooter';
 import { ReaderTopBar } from './ReaderTopBar';
-import { FONT_SIZES, ReadingSettings } from './ReadingSettings';
+import { ReadingSettings, TypographyOptions } from './ReadingSettings';
 import type { SelectionBox } from './SelectionMenu';
+import { SM, useMediaQuery } from './useMediaQuery';
 import { usePositionSaver } from './usePositionSaver';
 
 type Props = {
@@ -44,21 +54,35 @@ type Props = {
 /** foliate puts the text this far below the top of its box (the paginator's `--_margin`). */
 const TEXT_TOP = 48;
 
-const FONT_SIZE_KEY = 'hmr.fontSize';
-const DEFAULT_FONT_SIZE = 18;
+/** How the chapter's text is set, from the reader's choices in Aa. */
+type Look = {
+  typeface: Typeface;
+  fontSize: FontSize;
+  lineSpacing: LineSpacing;
+  lineWidth: LineWidth;
+  /** On a phone the screen, not the line width, limits the text: the width choice sets the side margins. */
+  phone: boolean;
+};
 
-function readFontSize(): number {
-  try {
-    const stored = Number(localStorage.getItem(FONT_SIZE_KEY));
-    return (FONT_SIZES as readonly number[]).includes(stored) ? stored : DEFAULT_FONT_SIZE;
-  } catch {
-    return DEFAULT_FONT_SIZE;
-  }
-}
+/** Each typeface's CSS variable, set on <html> by next/font in the root layout, and its fallbacks. */
+const TYPEFACE_FONTS: Record<Typeface, { variable: string; fallback: string }> = {
+  literata: { variable: '--font-literata', fallback: 'Georgia, serif' },
+  sans: { variable: '--font-geist-sans', fallback: 'system-ui, sans-serif' },
+  hyperlegible: { variable: '--font-atkinson', fallback: 'system-ui, sans-serif' },
+};
 
-/** The longest line of text, in ems of the chosen font size: about 70 characters. */
-const LINE_WIDTH_EM = 34;
-const LINE_HEIGHT = 1.7;
+const LINE_HEIGHTS: Record<LineSpacing, number> = { tight: 1.5, normal: 1.7, airy: 1.9 };
+
+/**
+ * The longest line, in ems of the font size (medium is about 70 characters), and on a phone the
+ * gap foliate leaves around the text, as a share of the screen's width (foliate's default is 7%).
+ */
+const LINE_WIDTHS: Record<LineWidth, { em: number; phoneGap: string }> = {
+  narrow: { em: 28, phoneGap: '14%' },
+  medium: { em: 34, phoneGap: '7%' },
+  wide: { em: 42, phoneGap: '3%' },
+};
+const DESKTOP_GAP = '7%';
 
 /** The family names in a CSS font-family list, without quotes. */
 const familyNames = (list: string) => list.split(',').map((f) => f.trim().replace(/^["']|["']$/g, ''));
@@ -92,32 +116,37 @@ function fontFaces(families: string[]): string {
 let readingFontFaces: string | null = null;
 
 /**
- * The chapter's styles: font size, the reading font and line height, and the page's theme
- * colours. The chapter is drawn in an iframe, which inherits none of the page's fonts or CSS
- * variables, so they are copied in here.
+ * The chapter's styles: font size, typeface and line height, and the page's theme colours. The
+ * chapter is drawn in an iframe, which inherits none of the page's fonts or CSS variables, so
+ * they are copied in here.
  */
-function readerCss(size: number): string {
+function readerCss(look: Look): string {
   const theme = getComputedStyle(document.documentElement);
   const bg = theme.getPropertyValue('--bg');
   const ink = theme.getPropertyValue('--ink');
-  // Literata, loaded by next/font in the root layout: `"Literata", "Literata Fallback"`.
-  const font = theme.getPropertyValue('--font-literata').trim();
-  readingFontFaces ??= font ? fontFaces(familyNames(font)) : '';
-  const family = font ? `${font}, Georgia, serif` : 'Georgia, serif';
+  // Each variable holds a list such as `"Literata", "Literata Fallback"`. All three typefaces are
+  // declared in the chapter, so a switch needs no new rules; only the chosen one is downloaded.
+  const fonts = Object.values(TYPEFACE_FONTS).map((f) => theme.getPropertyValue(f.variable).trim());
+  readingFontFaces ??= fontFaces(fonts.filter(Boolean).flatMap(familyNames));
+  const { variable, fallback } = TYPEFACE_FONTS[look.typeface];
+  const font = theme.getPropertyValue(variable).trim();
+  const family = font ? `${font}, ${fallback}` : fallback;
   return `${readingFontFaces}
-html, body, p { font-size: ${size}px !important; }
+html, body, p { font-size: ${look.fontSize}px !important; }
 html, body { background: ${bg} !important; color: ${ink} !important; }
-html, body { font-family: ${family} !important; line-height: ${LINE_HEIGHT} !important; }
+html, body { font-family: ${family} !important; line-height: ${LINE_HEIGHTS[look.lineSpacing]} !important; }
 p, li, blockquote, dd, dt { font-family: inherit !important; line-height: inherit !important; }`;
 }
 
 /** Applies the reading styles, and a line width that follows the font size, to the view. */
-function styleReader(view: View, size: number) {
+function styleReader(view: View, look: Look) {
+  const width = LINE_WIDTHS[look.lineWidth];
   // foliate-js lays the chapter out in columns no wider than `max-inline-size` (in px only), and
   // puts two side by side when they fit; one column keeps the line length readable on a desktop.
   view.renderer.setAttribute('max-column-count', '1');
-  view.renderer.setAttribute('max-inline-size', `${Math.round(LINE_WIDTH_EM * size)}px`);
-  view.renderer.setStyles(readerCss(size));
+  view.renderer.setAttribute('max-inline-size', `${Math.round(width.em * look.fontSize)}px`);
+  view.renderer.setAttribute('gap', look.phone ? width.phoneGap : DESKTOP_GAP);
+  view.renderer.setStyles(readerCss(look));
 }
 
 /** The range's box in the reader's viewport (the section is drawn in an iframe). */
@@ -161,7 +190,17 @@ export default function EpubReader({
   onHighlights,
   controlsRef,
 }: Props) {
-  const [fontSize, setFontSize] = useState(readFontSize);
+  const [fontSize, setFontSize] = usePref(PREFS.fontSize);
+  const [typeface, setTypeface] = usePref(PREFS.typeface);
+  const [lineSpacing, setLineSpacing] = usePref(PREFS.lineSpacing);
+  const [lineWidth, setLineWidth] = usePref(PREFS.lineWidth);
+  const phone = !useMediaQuery(SM);
+  const look = useMemo<Look>(
+    () => ({ typeface, fontSize, lineSpacing, lineWidth, phone }),
+    [typeface, fontSize, lineSpacing, lineWidth, phone],
+  );
+  // The chapter copies the theme's colours in, so it is styled again when the theme changes.
+  const theme = useShownTheme();
   const [error, setError] = useState(false);
   const [fraction, setFraction] = useState<number | null>(null);
   const [contents, setContents] = useState<EpubContents | null>(null);
@@ -170,14 +209,14 @@ export default function EpubReader({
   const { save, status } = usePositionSaver(bookId);
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<View | null>(null);
-  const fontSizeRef = useRef(fontSize);
+  const lookRef = useRef(look);
   const onSelectionRef = useRef(onSelection);
   const onHighlightTapRef = useRef(onHighlightTap);
   const highlightsRef = useRef(highlights);
   // What the view has been asked to draw, by CFI, oldest first.
   const drawnRef = useRef(new Map<string, HighlightView[]>());
   useEffect(() => {
-    fontSizeRef.current = fontSize;
+    lookRef.current = look;
     onSelectionRef.current = onSelection;
     onHighlightTapRef.current = onHighlightTap;
     highlightsRef.current = highlights;
@@ -298,7 +337,7 @@ export default function EpubReader({
       // Opening numbers the contents entries, which is how `relocate` names the current one.
       setContents(epubContents(view.book.toc));
       view.renderer.setAttribute('flow', 'paginated');
-      styleReader(view, fontSizeRef.current);
+      styleReader(view, lookRef.current);
       await view.init({ lastLocation: initialCfi, showTextStart: true });
       viewRef.current = view;
       syncAnnotations(view);
@@ -313,15 +352,9 @@ export default function EpubReader({
     };
   }, [bookId, fileUrl, initialCfi, save, syncAnnotations, turnPage]);
 
-  function chooseFontSize(size: number) {
-    setFontSize(size);
-    try {
-      localStorage.setItem(FONT_SIZE_KEY, String(size));
-    } catch {
-      // the choice just won't be remembered
-    }
-    if (viewRef.current) styleReader(viewRef.current, size);
-  }
+  useEffect(() => {
+    if (viewRef.current) styleReader(viewRef.current, look);
+  }, [look, theme]);
 
   const currentId = (tocId !== null && contents?.shownFor.get(tocId)) || null;
   const outline = {
@@ -342,7 +375,18 @@ export default function EpubReader({
         highlightsOpen={highlightsOpen}
         onHighlights={onHighlights}
       >
-        <ReadingSettings fontSize={fontSize} onFontSize={chooseFontSize} />
+        <ReadingSettings>
+          <TypographyOptions
+            typeface={typeface}
+            onTypeface={setTypeface}
+            fontSize={fontSize}
+            onFontSize={setFontSize}
+            lineSpacing={lineSpacing}
+            onLineSpacing={setLineSpacing}
+            lineWidth={lineWidth}
+            onLineWidth={setLineWidth}
+          />
+        </ReadingSettings>
       </ReaderTopBar>
       {status}
       {error && (

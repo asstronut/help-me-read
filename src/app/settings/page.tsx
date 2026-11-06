@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState, type FormEvent } from 'react';
 import type { ModelInfo } from '@/lib/ai/models';
 import type { Settings } from '@/lib/settings/settings.server';
+import { applyTheme } from '@/lib/settings/theme-client';
 import { ACTIONS, THEMES, type Action, type Theme } from '@/lib/types';
 
 type ModelView = ModelInfo & { available: boolean };
@@ -84,8 +85,7 @@ export default function SettingsPage() {
       const saved = ((await res.json()) as { settings: Settings }).settings;
       setSettings(saved);
       setCap(String(saved.monthlyCapUsd));
-      document.documentElement.classList.remove(...THEMES);
-      document.documentElement.classList.add(saved.theme);
+      applyTheme(saved.theme);
       setStatus('saved');
     } catch {
       setStatus('idle');
