@@ -1,6 +1,7 @@
 // foliate-js ships no types; this declares the slice of it the app uses.
 declare module 'foliate-js/view.js' {
-  export type TocItem = { label?: string; href?: string; subitems?: TocItem[] | null };
+  /** A table-of-contents entry; `id` is numbered by the view when it opens the book (TOCProgress). */
+  export type TocItem = { id?: number; label?: string; href?: string; subitems?: TocItem[] | null };
   export type FoliateBook = {
     sections: { id: string; createDocument: () => Promise<Document> }[];
     toc?: TocItem[] | null;
@@ -9,14 +10,19 @@ declare module 'foliate-js/view.js' {
 
   /**
    * Detail of the view's `relocate` event. `fraction` is how far through the whole book the
-   * current page ends, 0 to 1 (by section sizes; see SectionProgress in progress.js).
+   * current page ends, 0 to 1 (by section sizes; see SectionProgress in progress.js). `tocItem`
+   * is the deepest table-of-contents entry the page is in (TOCProgress.getProgress).
    */
-  export type RelocateDetail = { cfi: string; fraction?: number };
+  export type RelocateDetail = { cfi: string; fraction?: number; tocItem?: TocItem | null };
   /** Detail of the view's `load` event: a section's document has been rendered. */
   export type SectionLoadDetail = { doc: Document; index: number };
   export class View extends HTMLElement {
     renderer: HTMLElement & { setStyles(styles: string): void };
+    /** The opened book (set by `open`). */
+    book: FoliateBook;
     open(book: string): Promise<void>;
+    /** Goes to an href from the table of contents, or a CFI. */
+    goTo(target: string): Promise<unknown>;
     init(options: { lastLocation: string | null; showTextStart?: boolean }): Promise<void>;
     next(): Promise<void>;
     prev(): Promise<void>;
@@ -36,6 +42,11 @@ declare module 'foliate-js/view.js' {
   };
   /** Detail of `show-annotation`: an annotation was tapped. */
   export type ShowAnnotationDetail = { value: string };
+}
+
+declare module 'foliate-js/epubcfi.js' {
+  /** Orders two CFIs by their place in the book: negative, zero or positive. */
+  export function compare(a: string, b: string): number;
 }
 
 declare module 'foliate-js/overlayer.js' {

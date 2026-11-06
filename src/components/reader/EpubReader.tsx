@@ -8,11 +8,14 @@ import type {
   ShowAnnotationDetail,
   View,
 } from 'foliate-js/view.js';
+import { epubContents, findItem, type ContentsItem, type EpubContents } from '@/lib/reader/contents';
 import { listenForPageKeys, type PageTurn } from '@/lib/reader/page-keys';
 import { captureEpubSelection } from '@/lib/selection/capture-epub';
 import { watchTaps } from '@/lib/selection/tap';
 import { watchSelection } from '@/lib/selection/watch';
 import type { HighlightView, ReaderSelection } from '@/lib/types';
+import type { ReaderControls } from './reader-controls';
+import { ContentsOutline, ContentsRail } from './ContentsOutline';
 import { HIGHLIGHT_HEX, HIGHLIGHT_INKS } from './highlight-colors';
 import { PageTurnEdge } from './PageTurnEdge';
 import { ProgressFooter } from './ProgressFooter';
@@ -30,7 +33,16 @@ type Props = {
   highlights: HighlightView[];
   /** The highlights under a tap, most recent first. */
   onHighlightTap: (highlights: HighlightView[]) => void;
+  /** False while a side panel takes the room beside the book. */
+  roomBeside: boolean;
+  highlightsOpen: boolean;
+  onHighlights: () => void;
+  /** Filled in by the reader, so the page around it can move it to a highlight. */
+  controlsRef: { current: ReaderControls | null };
 };
+
+/** foliate puts the text this far below the top of its box (the paginator's `--_margin`). */
+const TEXT_TOP = 48;
 
 const FONT_SIZE_KEY = 'hmr.fontSize';
 const DEFAULT_FONT_SIZE = 18;
@@ -144,10 +156,17 @@ export default function EpubReader({
   onSelection,
   highlights,
   onHighlightTap,
+  roomBeside,
+  highlightsOpen,
+  onHighlights,
+  controlsRef,
 }: Props) {
   const [fontSize, setFontSize] = useState(readFontSize);
   const [error, setError] = useState(false);
   const [fraction, setFraction] = useState<number | null>(null);
+  const [contents, setContents] = useState<EpubContents | null>(null);
+  // foliate's id of the contents entry the page is in.
+  const [tocId, setTocId] = useState<number | null>(null);
   const { save, status } = usePositionSaver(bookId);
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<View | null>(null);
@@ -187,6 +206,17 @@ export default function EpubReader({
     if (viewRef.current) syncAnnotations(viewRef.current);
   }, [highlights, syncAnnotations]);
 
+  useEffect(() => {
+    controlsRef.current = {
+      goTo: (anchor) => {
+        if (anchor.format === 'epub') void viewRef.current?.goTo(anchor.cfi);
+      },
+    };
+    return () => {
+      controlsRef.current = null;
+    };
+  }, [controlsRef]);
+
   // The keys work on the page around the book; the chapter's own document gets them on load.
   useEffect(() => listenForPageKeys(window, turnPage), [turnPage]);
 
@@ -207,9 +237,10 @@ export default function EpubReader({
       view = document.createElement('foliate-view') as View;
       view.style.cssText = 'display:block;width:100%;height:100%';
       view.addEventListener('relocate', (e) => {
-        const { cfi, fraction } = (e as CustomEvent<RelocateDetail>).detail;
+        const { cfi, fraction, tocItem } = (e as CustomEvent<RelocateDetail>).detail;
         save({ cfi });
         if (typeof fraction === 'number') setFraction(fraction);
+        setTocId(tocItem?.id ?? null);
       });
       view.addEventListener('load', (e) => {
         const { doc, index } = (e as CustomEvent<SectionLoadDetail>).detail;
@@ -264,6 +295,8 @@ export default function EpubReader({
       host.append(view);
       await view.open(fileUrl);
       if (cancelled) return;
+      // Opening numbers the contents entries, which is how `relocate` names the current one.
+      setContents(epubContents(view.book.toc));
       view.renderer.setAttribute('flow', 'paginated');
       styleReader(view, fontSizeRef.current);
       await view.init({ lastLocation: initialCfi, showTextStart: true });
@@ -290,9 +323,25 @@ export default function EpubReader({
     if (viewRef.current) styleReader(viewRef.current, size);
   }
 
+  const currentId = (tocId !== null && contents?.shownFor.get(tocId)) || null;
+  const outline = {
+    items: contents?.items ?? null,
+    currentId,
+    onGo: (item: ContentsItem) => {
+      if (item.target && 'href' in item.target) void viewRef.current?.goTo(item.target.href);
+    },
+    emptyText: 'No contents in this book',
+  };
+
   return (
     <div className="flex h-dvh flex-col">
-      <ReaderTopBar title={title}>
+      <ReaderTopBar
+        title={title}
+        chapter={contents ? (findItem(contents.items, currentId)?.item.label ?? null) : null}
+        contents={<ContentsOutline {...outline} placement="bar" />}
+        highlightsOpen={highlightsOpen}
+        onHighlights={onHighlights}
+      >
         <ReadingSettings fontSize={fontSize} onFontSize={chooseFontSize} />
       </ReaderTopBar>
       {status}
@@ -301,7 +350,8 @@ export default function EpubReader({
           Could not open this EPUB.
         </p>
       )}
-      <div className="group flex min-h-0 flex-1 sm:px-7">
+      {/* The ☰ button's 18px icon is 13px into its 44px box: line the icon up with the text. */}
+      <ContentsRail {...outline} roomBeside={roomBeside} top={TEXT_TOP - 13} className="group">
         <PageTurnEdge direction="previous" onClick={() => turnPage(-1)} />
         {/* Note highlights are drawn by foliate at this opacity: the theme's tint strength. */}
         <div
@@ -309,7 +359,7 @@ export default function EpubReader({
           className="min-w-0 flex-1 [--overlayer-highlight-opacity:var(--highlight-alpha)]"
         />
         <PageTurnEdge direction="next" onClick={() => turnPage(1)} />
-      </div>
+      </ContentsRail>
       <ProgressFooter fraction={fraction} />
     </div>
   );

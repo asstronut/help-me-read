@@ -7,6 +7,7 @@ import { InlineAlert } from '@/components/ui/InlineAlert';
 import { Toast } from '@/components/ui/Toast';
 import { cn } from '@/components/ui/cn';
 import { CheckIcon } from '@/components/ui/icons';
+import { currentPdfItem, type ContentsItem } from '@/lib/reader/contents';
 import { e2eHooksEnabled } from '@/lib/test-mode';
 import type {
   Action,
@@ -18,7 +19,10 @@ import type {
   ReaderSelection,
   ReadingLocation,
 } from '@/lib/types';
+import { HighlightsPanel } from './HighlightsPanel';
 import { NoteEditor } from './NoteEditor';
+import type { ReaderControls } from './reader-controls';
+import { BESIDE, useMediaQuery } from './useMediaQuery';
 import { SelectionMenu, type SelectionBox } from './SelectionMenu';
 
 // pdf.js needs the browser, so the reader is never rendered on the server.
@@ -116,6 +120,11 @@ export function ReadView({ bookId, threadId, at }: Props) {
   const [editing, setEditing] = useState<HighlightView | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // The highlights and threads panel. It shares the right side with the thread panel: one at a time.
+  const [listOpen, setListOpen] = useState(false);
+  const [pdfContents, setPdfContents] = useState<ContentsItem[]>([]);
+  const controls = useRef<ReaderControls | null>(null);
+  const panelsBeside = useMediaQuery(BESIDE);
   // Tapping the same overlapping highlights again moves on to the next one.
   const lastTap = useRef<{ ids: string; index: number } | null>(null);
 
@@ -166,6 +175,7 @@ export function ReadView({ bookId, threadId, at }: Props) {
       });
       return;
     }
+    setListOpen(false);
     setOpen((prev) => ({ key: (prev?.key ?? 0) + 1, threadId: null, action: item, selection }));
   };
 
@@ -180,7 +190,33 @@ export function ReadView({ bookId, threadId, at }: Props) {
     });
   };
 
-  const openThread = (id: string) => setOpen((prev) => ({ key: (prev?.key ?? 0) + 1, threadId: id }));
+  const openThread = (id: string) => {
+    setListOpen(false);
+    setOpen((prev) => ({ key: (prev?.key ?? 0) + 1, threadId: id }));
+  };
+
+  const toggleList = () => {
+    setOpen(null);
+    setListOpen((o) => !o);
+  };
+
+  /** Goes to the highlight; a thread opens in place of the list. On a phone the list (a sheet over the book) closes. */
+  const jumpTo = (highlight: HighlightView) => {
+    controls.current?.goTo(highlight.anchor);
+    if (highlight.threadId) openThread(highlight.threadId);
+    else if (!panelsBeside) setListOpen(false);
+  };
+
+  /** A link to the highlight, for opening it in a new tab: `?at=`, and `?thread=` for a thread. */
+  const hrefOf = (highlight: HighlightView) => {
+    const params = new URLSearchParams({ at: JSON.stringify(highlight.anchor) });
+    if (highlight.threadId) params.set('thread', highlight.threadId);
+    return `/read/${bookId}?${params}`;
+  };
+
+  /** A PDF's highlights are grouped by its bookmarks when it has them; otherwise by segment label. */
+  const chapterOf = (highlight: HighlightView) =>
+    highlight.anchor.format === 'pdf' ? (currentPdfItem(pdfContents, highlight.anchor.page)?.label ?? null) : null;
 
   /** Opens the most recent of the tapped highlights, or the next one when the same ones are tapped again. */
   const onHighlightTap = (tapped: HighlightView[]) => {
@@ -210,6 +246,7 @@ export function ReadView({ bookId, threadId, at }: Props) {
       onClose={() => setOpen(null)}
     />
   );
+  const sidePanel = Boolean(open) || listOpen;
 
   const menu = (
     <>
@@ -243,7 +280,7 @@ export function ReadView({ bookId, threadId, at }: Props) {
           className={cn(
             'pointer-events-none fixed inset-x-0 z-50 flex flex-col items-center gap-2 px-4',
             loaded.format === 'pdf' ? 'bottom-[116px] sm:bottom-[144px]' : 'bottom-14 sm:bottom-[76px]',
-            open && 'md:pr-[420px]',
+            sidePanel && 'md:pr-[420px]',
           )}
         >
           {problem && (
@@ -259,25 +296,38 @@ export function ReadView({ bookId, threadId, at }: Props) {
         </div>
       )}
       {panel}
+      {listOpen && (
+        <HighlightsPanel
+          highlights={highlights}
+          chapterOf={chapterOf}
+          hrefOf={hrefOf}
+          onJump={jumpTo}
+          onClose={() => setListOpen(false)}
+        />
+      )}
     </>
   );
-  // On desktop the open thread panel (420 px) sits beside the book, so the book reflows into the rest.
-  const bookClass = open ? 'md:pr-[420px]' : undefined;
+  // On desktop an open side panel (420 px) sits beside the book, so the book reflows into the rest.
+  const bookClass = sidePanel ? 'md:pr-[420px]' : undefined;
+  const shared = {
+    bookId,
+    title: loaded.title,
+    fileUrl: loaded.fileUrl,
+    onSelection,
+    highlights,
+    onHighlightTap,
+    roomBeside: !sidePanel,
+    highlightsOpen: listOpen,
+    onHighlights: toggleList,
+    controlsRef: controls,
+  };
   if (loaded.format === 'epub') {
     const savedCfi = loaded.location && 'cfi' in loaded.location ? loaded.location.cfi : null;
     const initialCfi = at?.format === 'epub' ? at.cfi : savedCfi;
     return (
       <>
         <div className={bookClass}>
-          <EpubReader
-            bookId={bookId}
-            title={loaded.title}
-            fileUrl={loaded.fileUrl}
-            initialCfi={initialCfi}
-            onSelection={onSelection}
-            highlights={highlights}
-            onHighlightTap={onHighlightTap}
-          />
+          <EpubReader {...shared} initialCfi={initialCfi} />
         </div>
         {menu}
       </>
@@ -288,15 +338,7 @@ export function ReadView({ bookId, threadId, at }: Props) {
   return (
     <>
       <div className={bookClass}>
-        <PdfReader
-          bookId={bookId}
-          title={loaded.title}
-          fileUrl={loaded.fileUrl}
-          initialPage={initialPage}
-          onSelection={onSelection}
-          highlights={highlights}
-          onHighlightTap={onHighlightTap}
-        />
+        <PdfReader {...shared} initialPage={initialPage} onContents={setPdfContents} />
       </div>
       {menu}
     </>
