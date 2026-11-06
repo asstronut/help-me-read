@@ -178,6 +178,7 @@ export async function getThread(supabase: Db, threadId: string) {
       action: thread.action,
       scope: thread.scope,
       highlightId: thread.highlightId,
+      quote: thread.quote,
     },
     messages: await loadMessages(supabase, threadId),
   };

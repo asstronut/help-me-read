@@ -65,10 +65,10 @@ describe('threads: first answer', () => {
     const got = await api.get(`/api/threads/${threadId}`);
     expect(got.status).toBe(200);
     const body = (await got.json()) as {
-      thread: { id: string; action: string; scope: string; highlightId: string };
+      thread: { id: string; action: string; scope: string; highlightId: string; quote: string };
       messages: { role: string; content: string; modelId: string; status: string }[];
     };
-    expect(body.thread).toEqual({ id: threadId, action: 'define', scope: 'page', highlightId });
+    expect(body.thread).toEqual({ id: threadId, action: 'define', scope: 'page', highlightId, quote: 'steep' });
     const answers = body.messages.filter((m) => m.role === 'assistant');
     expect(answers).toHaveLength(1);
     expect(answers[0]).toMatchObject({

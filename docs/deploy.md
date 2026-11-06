@@ -75,4 +75,4 @@ A model's `tested` flag in `src/lib/ai/models.ts` should be `true` only if its D
 
 ## 8. Manual check on phone and laptop
 
-Upload a real PDF and EPUB. Try Define, Explain, a follow-up question, and Re-ask with another provider; save a word with +Vocab; reopen a thread on the other device; confirm the reading position resumes there and that the spend shown in Settings went up.
+Upload a real PDF and EPUB. Try Define, Explain, a follow-up question, and Re-ask with another provider; save a word with Vocab; reopen a thread on the other device; confirm the reading position resumes there and that the spend shown in Settings went up.

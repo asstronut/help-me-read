@@ -76,14 +76,14 @@ test.beforeEach(async ({ page }) => {
   for (const e of entries) await page.request.delete(`/api/vocab/${e.id}`);
 });
 
-test('+Vocab saves a word that the vocab page can search, jump to, export and delete', async ({
+test('Save to vocab saves a word that the vocab page can search, jump to, export and delete', async ({
   page,
 }) => {
   const bookId = await addPdf(page);
   await page.goto(`/read/${bookId}`);
   await expect(textLayer(page, 1)).toContainText('steep');
   await selectOnFirstPage(page, 'steep');
-  await menu(page).getByRole('button', { name: '+Vocab' }).click();
+  await menu(page).getByRole('button', { name: 'Save to vocab' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Saved to vocab' })).toBeVisible();
   await expect(menu(page)).toHaveCount(0);
 

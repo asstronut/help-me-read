@@ -6,7 +6,7 @@ The design lives on the "Help Me Read — UI Makeover" canvas (claude.ai artifac
 
 ## Rules for every PR
 
-- **Keep accessible names stable.** The e2e tests find controls by role and name (`Next page`, `Zoom in`, `Fit to width`, `Page number`, `Selection menu`, `Highlight yellow`, `+Vocab`, `Retry`, `Delete thread`, `Yes, delete`, `Follow-up`, `Save`, …). Restyle freely, but when a name or visible text must change, update the test in the same PR and say so in the description.
+- **Keep accessible names stable.** The e2e tests find controls by role and name (`Next page`, `Zoom in`, `Fit to width`, `Page number`, `Selection menu`, `Highlight yellow`, `Save to vocab`, `Retry`, `Delete thread`, `Yes, delete`, `Follow-up`, `Save`, …). Restyle freely, but when a name or visible text must change, update the test in the same PR and say so in the description.
 - **Use the tokens, not raw colours.** Every colour comes from the theme tokens added in step 1.
 - **44px touch targets** for every button and link.
 - **Check all three themes** (Light, Sepia, Dark) before merging.
