@@ -41,6 +41,8 @@ type RailProps = Props & {
   top: number;
   /** The book. */
   children: ReactNode;
+  /** Classes for the rail itself (not the book), such as hiding it with the other controls. */
+  outlineClassName?: string;
 };
 
 /**
@@ -48,7 +50,7 @@ type RailProps = Props & {
  * panel needs the room, else just the ☰ button (44px). The same width is kept free on the right,
  * so the book stays centred. On a phone there is no rail (the ☰ button is in the top bar).
  */
-export function ContentsRail({ roomBeside, top, children, className, ...props }: RailProps) {
+export function ContentsRail({ roomBeside, top, children, className, outlineClassName, ...props }: RailProps) {
   const wide = useMediaQuery(WIDE);
   const docked = wide && roomBeside;
   const [railOpen, setRailOpen] = useState(true);
@@ -61,7 +63,7 @@ export function ContentsRail({ roomBeside, top, children, className, ...props }:
         docked={docked}
         railOpen={railOpen}
         onRailToggle={() => setRailOpen((o) => !o)}
-        className="hidden sm:flex"
+        className={cn('hidden sm:flex', outlineClassName)}
         style={{ width, marginTop: top }}
       />
       <div className="flex min-w-0 flex-1">{children}</div>
