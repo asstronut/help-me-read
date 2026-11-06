@@ -23,3 +23,33 @@ export function watchTaps(doc: Document, onRelease: (tap: boolean) => void): () 
     doc.removeEventListener('click', onClick, true);
   };
 }
+
+/**
+ * Calls `onTap` for each finger or pen tap in `doc` that is free to act on the page: not the end
+ * of a drag, not on a link, and not one that only clears a selection. A mouse click never counts:
+ * with a mouse, clicking the text is for selecting it. Runs after the document's own click
+ * handlers (it listens on the window), so they have had their say. Returns a function that stops
+ * watching.
+ */
+export function watchPageTaps(doc: Document, onTap: (e: MouseEvent) => void): () => void {
+  const win = doc.defaultView;
+  if (!win) return () => undefined;
+  let pressed: (Point & { counts: boolean }) | null = null;
+  const onDown = (e: PointerEvent) => {
+    const selected = !(doc.getSelection()?.isCollapsed ?? true);
+    pressed = { x: e.clientX, y: e.clientY, counts: e.pointerType !== 'mouse' && !selected };
+  };
+  const onClick = (e: MouseEvent) => {
+    const from = pressed;
+    pressed = null;
+    if (!from?.counts || Math.hypot(e.clientX - from.x, e.clientY - from.y) > TAP_SLOP_PX) return;
+    if (e.target instanceof win.Element && e.target.closest('a[href]')) return;
+    onTap(e);
+  };
+  doc.addEventListener('pointerdown', onDown, true);
+  win.addEventListener('click', onClick);
+  return () => {
+    doc.removeEventListener('pointerdown', onDown, true);
+    win.removeEventListener('click', onClick);
+  };
+}

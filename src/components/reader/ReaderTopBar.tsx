@@ -16,12 +16,23 @@ type Props = {
   onHighlights: () => void;
   /** The reader's controls on the right, such as Aa (before the bookmark button). */
   children?: ReactNode;
+  className?: string;
 };
 
 /** The bar above the book: back to the Library, the book's title, and the reader's own controls. */
-export function ReaderTopBar({ title, chapter, contents, highlightsOpen, onHighlights, children }: Props) {
+export function ReaderTopBar({
+  title,
+  chapter,
+  contents,
+  highlightsOpen,
+  onHighlights,
+  children,
+  className,
+}: Props) {
   return (
-    <header className="flex items-center gap-2 px-2 py-1 text-[13px] text-muted sm:gap-4 sm:px-7 sm:py-4">
+    <header
+      className={cn('flex items-center gap-2 px-2 py-1 text-[13px] text-muted sm:gap-4 sm:px-7 sm:py-4', className)}
+    >
       {/* The two sides share the space equally, so the title stays centred on the page. */}
       <div className="flex flex-1 basis-0">
         <Link

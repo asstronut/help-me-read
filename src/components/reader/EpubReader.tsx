@@ -19,7 +19,7 @@ import {
   type Typeface,
 } from '@/lib/reader/reading-prefs';
 import { captureEpubSelection } from '@/lib/selection/capture-epub';
-import { watchTaps } from '@/lib/selection/tap';
+import { watchPageTaps, watchTaps } from '@/lib/selection/tap';
 import { watchSelection } from '@/lib/selection/watch';
 import { useShownTheme } from '@/lib/settings/theme-client';
 import type { HighlightView, ReaderSelection } from '@/lib/types';
@@ -31,7 +31,7 @@ import { ProgressFooter } from './ProgressFooter';
 import { ReaderTopBar } from './ReaderTopBar';
 import { ReadingSettings, TypographyOptions } from './ReadingSettings';
 import type { SelectionBox } from './SelectionMenu';
-import { SM, useMediaQuery } from './useMediaQuery';
+import { SM, TOUCH, useMediaQuery } from './useMediaQuery';
 import { usePositionSaver } from './usePositionSaver';
 
 type Props = {
@@ -62,6 +62,8 @@ type Look = {
   lineWidth: LineWidth;
   /** On a phone the screen, not the line width, limits the text: the width choice sets the side margins. */
   phone: boolean;
+  /** A touch screen: held sideways, it shows two columns side by side, like an open book. */
+  spread: boolean;
 };
 
 /** Each typeface's CSS variable, set on <html> by next/font in the root layout, and its fallbacks. */
@@ -142,8 +144,9 @@ p, li, blockquote, dd, dt { font-family: inherit !important; line-height: inheri
 function styleReader(view: View, look: Look) {
   const width = LINE_WIDTHS[look.lineWidth];
   // foliate-js lays the chapter out in columns no wider than `max-inline-size` (in px only), and
-  // puts two side by side when they fit; one column keeps the line length readable on a desktop.
-  view.renderer.setAttribute('max-column-count', '1');
+  // puts up to `max-column-count` side by side when they fit, in landscape only (its own container
+  // query falls back to one column in portrait). A desktop keeps one column, as designed.
+  view.renderer.setAttribute('max-column-count', look.spread ? '2' : '1');
   view.renderer.setAttribute('max-inline-size', `${Math.round(width.em * look.fontSize)}px`);
   view.renderer.setAttribute('gap', look.phone ? width.phoneGap : DESKTOP_GAP);
   view.renderer.setStyles(readerCss(look));
@@ -177,6 +180,17 @@ const looks = (group: HighlightView[]) => group.map((h) => `${h.id}:${h.kind}:${
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
+/**
+ * What a tap on the text does, by where it lands across the book: the left third turns back, the
+ * right third forward (goLeft and goRight follow the book's direction), the middle shows or hides
+ * the reader's controls.
+ */
+function zoneAction(x: number, book: DOMRect): 'left' | 'right' | 'controls' {
+  const third = ((x - book.left) / book.width) * 3;
+  if (third < 1) return 'left';
+  return third < 2 ? 'controls' : 'right';
+}
+
 export default function EpubReader({
   bookId,
   title,
@@ -195,9 +209,10 @@ export default function EpubReader({
   const [lineSpacing, setLineSpacing] = usePref(PREFS.lineSpacing);
   const [lineWidth, setLineWidth] = usePref(PREFS.lineWidth);
   const phone = !useMediaQuery(SM);
+  const spread = useMediaQuery(TOUCH);
   const look = useMemo<Look>(
-    () => ({ typeface, fontSize, lineSpacing, lineWidth, phone }),
-    [typeface, fontSize, lineSpacing, lineWidth, phone],
+    () => ({ typeface, fontSize, lineSpacing, lineWidth, phone, spread }),
+    [typeface, fontSize, lineSpacing, lineWidth, phone, spread],
   );
   // The chapter copies the theme's colours in, so it is styled again when the theme changes.
   const theme = useShownTheme();
@@ -206,6 +221,10 @@ export default function EpubReader({
   const [contents, setContents] = useState<EpubContents | null>(null);
   // foliate's id of the contents entry the page is in.
   const [tocId, setTocId] = useState<number | null>(null);
+  // Hidden by a tap in the middle of the text, and shown by the next one. They keep their room
+  // while hidden, so the text does not move.
+  const [controlsShown, setControlsShown] = useState(true);
+  const hideControls = controlsShown ? undefined : 'invisible';
   const { save, status } = usePositionSaver(bookId);
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<View | null>(null);
@@ -267,6 +286,8 @@ export default function EpubReader({
     let unwatch: (() => void) | undefined;
     // Whether the last press in the section ended where it started; the end of a drag is not a tap.
     let lastReleaseWasTap = false;
+    // Whether the last tap opened a highlight, which a tap zone then leaves alone.
+    let tapOpenedHighlight = false;
     (async () => {
       const [, { Overlayer }] = await Promise.all([
         import('foliate-js/view.js'),
@@ -293,12 +314,24 @@ export default function EpubReader({
         });
         const unwatchTaps = watchTaps(doc, (tap) => {
           lastReleaseWasTap = tap;
+          tapOpenedHighlight = false;
+        });
+        const unwatchPageTaps = watchPageTaps(doc, (e) => {
+          const host = hostRef.current;
+          const frame = doc.defaultView?.frameElement;
+          if (tapOpenedHighlight || !host || !frame) return;
+          // The tap's x is inside the chapter's iframe, which is as wide as all its pages.
+          const x = frame.getBoundingClientRect().left + e.clientX;
+          const action = zoneAction(x, host.getBoundingClientRect());
+          if (action === 'controls') setControlsShown((shown) => !shown);
+          else void (action === 'left' ? current.goLeft() : current.goRight());
         });
         // A click in the text moves the focus into the chapter's iframe, so its keys come from there.
         const unwatchKeys = listenForPageKeys(doc, turnPage);
         unwatch = () => {
           unwatchSelection();
           unwatchTaps();
+          unwatchPageTaps();
           unwatchKeys();
         };
       });
@@ -330,7 +363,9 @@ export default function EpubReader({
       view.addEventListener('show-annotation', (e) => {
         if (!lastReleaseWasTap) return;
         const group = drawnRef.current.get((e as CustomEvent<ShowAnnotationDetail>).detail.value);
-        if (group) onHighlightTapRef.current([...group].reverse());
+        if (!group) return;
+        tapOpenedHighlight = true;
+        onHighlightTapRef.current([...group].reverse());
       });
       host.append(view);
       await view.open(fileUrl);
@@ -375,6 +410,7 @@ export default function EpubReader({
         contents={<ContentsOutline {...outline} placement="bar" />}
         highlightsOpen={highlightsOpen}
         onHighlights={onHighlights}
+        className={hideControls}
       >
         <ReadingSettings>
           <TypographyOptions
@@ -396,16 +432,22 @@ export default function EpubReader({
         </p>
       )}
       {/* The ☰ button's 18px icon is 13px into its 44px box: line the icon up with the text. */}
-      <ContentsRail {...outline} roomBeside={roomBeside} top={TEXT_TOP - 13} className="group">
-        <PageTurnEdge direction="previous" onClick={() => turnPage(-1)} />
+      <ContentsRail
+        {...outline}
+        roomBeside={roomBeside}
+        top={TEXT_TOP - 13}
+        className="group"
+        outlineClassName={hideControls}
+      >
+        <PageTurnEdge direction="previous" onClick={() => turnPage(-1)} className={hideControls} />
         {/* Note highlights are drawn by foliate at this opacity: the theme's tint strength. */}
         <div
           ref={hostRef}
           className="min-w-0 flex-1 [--overlayer-highlight-opacity:var(--highlight-alpha)]"
         />
-        <PageTurnEdge direction="next" onClick={() => turnPage(1)} />
+        <PageTurnEdge direction="next" onClick={() => turnPage(1)} className={hideControls} />
       </ContentsRail>
-      <ProgressFooter fraction={fraction} />
+      <ProgressFooter fraction={fraction} className={hideControls} />
     </div>
   );
 }

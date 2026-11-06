@@ -19,6 +19,8 @@ export function useMediaQuery(query: string): boolean {
   );
 }
 
+/** A touch screen (a phone or a tablet): the main pointer is a finger. */
+export const TOUCH = '(pointer: coarse)';
 /** Wider than a phone (Tailwind's `sm`). */
 export const SM = '(min-width: 640px)';
 /** Wide enough for the contents outline to sit open beside the book (Tailwind's `lg`). */

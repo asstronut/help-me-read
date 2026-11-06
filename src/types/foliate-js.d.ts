@@ -26,6 +26,9 @@ declare module 'foliate-js/view.js' {
     init(options: { lastLocation: string | null; showTextStart?: boolean }): Promise<void>;
     next(): Promise<void>;
     prev(): Promise<void>;
+    /** Turns the page to the left or right: back or forward by the book's reading direction. */
+    goLeft(): Promise<void>;
+    goRight(): Promise<void>;
     close(): void;
     getCFI(index: number, range: Range): string;
     /** Draws (via the `draw-annotation` event) the annotation in its section, when that section is shown. */
