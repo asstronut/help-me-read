@@ -130,7 +130,7 @@ test('hiding the tab saves the position immediately', async ({ page }) => {
     Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
     document.dispatchEvent(new Event('visibilitychange'));
   });
-  expect(JSON.parse((await saved).postData() ?? '{}')).toEqual({ page: 3 });
+  expect(JSON.parse((await saved).postData() ?? '{}')).toEqual({ page: 3, progress: 1 }); // 3 of 3 pages
   await expect
     .poll(async () => (await (await page.request.get(`/api/books/${id}/position`)).json()).location)
     .toEqual({ page: 3 });
@@ -180,7 +180,7 @@ test('hiding the tab sends the newest page even while an earlier save hangs', as
     Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
     document.dispatchEvent(new Event('visibilitychange'));
   });
-  expect(JSON.parse((await second).postData() ?? '{}')).toEqual({ page: 3 });
+  expect(JSON.parse((await second).postData() ?? '{}')).toEqual({ page: 3, progress: 1 });
 });
 
 /** Fails every PUT to the position endpoint with `status` and counts how many were made. */

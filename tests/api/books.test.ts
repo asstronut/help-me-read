@@ -11,6 +11,7 @@ type ListItem = {
   format: string;
   extracted: boolean;
   lastOpenedAt: string | null;
+  progress: number | null;
 };
 
 async function signedInOwner() {
@@ -64,6 +65,7 @@ describe('books', () => {
       format: 'pdf',
       extracted: false,
       lastOpenedAt: null,
+      progress: null,
     });
   });
 

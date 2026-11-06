@@ -103,3 +103,18 @@ export const CheckIcon = (props: IconProps) => (
     <path d="M5 12l5 5 9-10" />
   </Icon>
 );
+
+/** A magnifying glass: search. */
+export const SearchIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <circle cx="11" cy="11" r="6" />
+    <path d="M20 20l-4.5-4.5" />
+  </Icon>
+);
+
+/** An arrow down onto a line: download. */
+export const DownloadIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />
+  </Icon>
+);

@@ -10,13 +10,15 @@ export type BookItem = {
   format: BookFormat;
   extracted: boolean;
   lastOpenedAt: string | null;
+  /** How far through the book the reader is, 0 to 1; null until it is first read. */
+  progress: number | null;
 };
 
 export const BOOK_COLUMNS =
-  'id, title, author, format, storage_path, segment_count, extracted_at, last_opened_at';
+  'id, title, author, format, storage_path, segment_count, extracted_at, last_opened_at, progress';
 
 export function toBookItem(
-  row: Pick<BookRow, 'id' | 'title' | 'author' | 'format' | 'extracted_at' | 'last_opened_at'>,
+  row: Pick<BookRow, 'id' | 'title' | 'author' | 'format' | 'extracted_at' | 'last_opened_at' | 'progress'>,
 ): BookItem {
   return {
     id: row.id,
@@ -25,5 +27,6 @@ export function toBookItem(
     format: row.format as BookFormat,
     extracted: row.extracted_at !== null,
     lastOpenedAt: row.last_opened_at,
+    progress: row.progress,
   };
 }

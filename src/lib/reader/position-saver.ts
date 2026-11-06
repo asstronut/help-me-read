@@ -1,5 +1,3 @@
-import type { ReadingLocation } from '@/lib/types';
-
 export class PositionSaveError extends Error {
   constructor(readonly status: number) {
     super(`Saving position failed: ${status}`);
@@ -16,12 +14,12 @@ const MAX_DELAY_MS = 30_000;
  * location and retries with a doubling delay, unless a newer location has been sent since; a
  * 401/403 stops saving. `dispose` makes a final attempt, then never retries or reports again.
  */
-export function createPositionSaver(
-  save: (location: ReadingLocation) => Promise<void>,
+export function createPositionSaver<T>(
+  save: (location: T) => Promise<void>,
   intervalMs = 2000,
   onResult?: (result: SaveResult) => void,
-): { update(location: ReadingLocation): void; flush(): Promise<void>; dispose(): Promise<void> } {
-  let pending: ReadingLocation | null = null;
+): { update(location: T): void; flush(): Promise<void>; dispose(): Promise<void> } {
+  let pending: T | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let delay = intervalMs;
   let stopped = false;

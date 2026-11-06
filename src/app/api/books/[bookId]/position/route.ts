@@ -13,6 +13,16 @@ const LocationSchema = z.union([
   z.strictObject({ cfi: z.string().min(1) }),
 ]);
 
+/** A location, optionally with how far through the book it is (0 to 1), which the Library shows. */
+function parseBody(raw: unknown): { location: ReadingLocation; progress: number | undefined } | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const { progress, ...rest } = raw as Record<string, unknown>;
+  const location = LocationSchema.safeParse(rest);
+  const fraction = z.number().min(0).max(1).optional().safeParse(progress);
+  if (!location.success || !fraction.success) return null;
+  return { location: location.data, progress: fraction.data };
+}
+
 export async function GET(_req: Request, { params }: Ctx) {
   try {
     const { supabase } = await requireUser();
@@ -54,17 +64,17 @@ export async function PUT(req: Request, { params }: Ctx) {
     if (bookError) throw bookError;
     if (!book) return notFound();
 
-    const parsed = LocationSchema.safeParse(await req.json().catch(() => null));
-    if (!parsed.success) return Response.json({ message: 'Invalid location' }, { status: 400 });
+    const parsed = parseBody(await req.json().catch(() => null));
+    if (!parsed) return Response.json({ message: 'Invalid location' }, { status: 400 });
 
     const now = new Date().toISOString();
     const { error } = await supabase
       .from('reading_positions')
-      .upsert({ book_id: bookId, location: parsed.data satisfies ReadingLocation, updated_at: now });
+      .upsert({ book_id: bookId, location: parsed.location, updated_at: now });
     if (error) throw error;
     const { error: openedError } = await supabase
       .from('books')
-      .update({ last_opened_at: now })
+      .update({ last_opened_at: now, progress: parsed.progress }) // an undefined progress is left out
       .eq('id', bookId);
     if (openedError) throw openedError;
     return new Response(null, { status: 204 });

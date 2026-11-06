@@ -1,6 +1,9 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { cn } from '@/components/ui/cn';
+import { PlusIcon } from '@/components/ui/icons';
+import { InlineAlert } from '@/components/ui/InlineAlert';
 import { readMetadata } from '@/lib/books/metadata';
 import { UPLOAD_REASONS, sniffFormat, validateUpload } from '@/lib/books/validate-upload';
 
@@ -79,7 +82,8 @@ export function UploadDropzone({ onUploaded }: { onUploaded: () => void }) {
   }
 
   return (
-    <div>
+    // `contents`: the button and its error join the shelf heading's row, the error on a line of its own.
+    <div className="contents">
       <label
         onDragOver={(e) => {
           e.preventDefault();
@@ -91,12 +95,15 @@ export function UploadDropzone({ onUploaded }: { onUploaded: () => void }) {
           setDragging(false);
           void handle(e.dataTransfer.files[0]);
         }}
-        className={`flex cursor-pointer flex-col items-center gap-1 rounded-lg border-2 border-dashed p-6 text-center ${
-          dragging ? 'border-blue-500 bg-blue-500/10' : 'border-gray-400'
-        }`}
+        className={cn(
+          'relative inline-flex min-h-11 cursor-pointer flex-wrap items-center gap-x-2 rounded-full border border-dashed px-4 py-2 text-[13px] text-ink transition-colors',
+          'focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent',
+          dragging ? 'border-accent bg-accent-tint' : 'border-rule hover:bg-chip',
+        )}
       >
+        <PlusIcon size={14} />
         <span className="font-medium">{busy ? 'Uploading…' : 'Add a book'}</span>
-        <span className="text-sm opacity-70">Drop a PDF or EPUB here, or tap to choose one</span>
+        <span className="text-muted">PDF or EPUB, up to 50 MB</span>
         <input
           ref={input}
           type="file"
@@ -107,11 +114,7 @@ export function UploadDropzone({ onUploaded }: { onUploaded: () => void }) {
           onChange={(e) => void handle(e.target.files?.[0])}
         />
       </label>
-      {error && (
-        <p role="alert" className="mt-2 text-sm text-red-600">
-          {error}
-        </p>
-      )}
+      {error && <InlineAlert className="w-full">{error}</InlineAlert>}
     </div>
   );
 }

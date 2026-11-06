@@ -2,6 +2,10 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { SiteNav } from '@/components/SiteNav';
+import { Button, buttonClasses } from '@/components/ui/Button';
+import { DownloadIcon, SearchIcon } from '@/components/ui/icons';
+import { InlineAlert } from '@/components/ui/InlineAlert';
 import type { VocabEntryView } from '@/lib/vocab/service.server';
 
 const jumpHref = (entry: VocabEntryView) =>
@@ -40,70 +44,88 @@ export default function VocabPage() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-2xl space-y-6 p-4 sm:p-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="flex-1 text-xl font-semibold">Vocab</h1>
-        <Link href="/library" className="text-sm hover:underline">
-          Library
-        </Link>
-        <a href="/api/vocab/export?format=csv" download className="text-sm hover:underline">
-          Export CSV
-        </a>
-        <a href="/api/vocab/export?format=anki" download className="text-sm hover:underline">
-          Export Anki
-        </a>
+    <main className="mx-auto flex w-full max-w-[1040px] flex-col gap-10 px-4 pt-5 pb-16 sm:px-6 sm:pt-7">
+      <SiteNav current="Vocab" />
+      <div className="mx-auto flex w-full max-w-[760px] flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <h1 className="font-serif text-[28px]">Vocab</h1>
+          <div className="flex flex-wrap">
+            <a href="/api/vocab/export?format=csv" download className={buttonClasses('quiet')}>
+              <DownloadIcon size={16} />
+              Export CSV
+            </a>
+            <a href="/api/vocab/export?format=anki" download className={buttonClasses('quiet')}>
+              <DownloadIcon size={16} />
+              Export Anki
+            </a>
+          </div>
+        </div>
+        <label className="flex h-11 items-center gap-2.5 rounded-xl bg-chip px-3.5 text-muted focus-within:outline-2 focus-within:outline-accent">
+          <SearchIcon size={16} />
+          <input
+            type="search"
+            aria-label="Search vocab"
+            placeholder="Search words and meanings"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-muted"
+          />
+        </label>
+        {error && <InlineAlert>{error}</InlineAlert>}
+        {entries?.length === 0 &&
+          (query ? (
+            <p className="py-4 text-sm text-muted">No matching words.</p>
+          ) : (
+            <div className="flex flex-col gap-1 rounded-xl border border-dashed border-rule p-5">
+              <p className="font-serif text-[17px]">No words yet</p>
+              <p className="text-sm text-muted">Select a word while reading and choose Vocab.</p>
+            </div>
+          ))}
+        {entries && entries.length > 0 && (
+          <ul>
+            {entries.map((entry) => (
+              <VocabRow key={entry.id} entry={entry} onDelete={() => void remove(entry.id)} />
+            ))}
+          </ul>
+        )}
       </div>
-      <input
-        type="search"
-        aria-label="Search vocab"
-        placeholder="Search words and meanings"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        className="w-full rounded border border-gray-400/60 bg-transparent px-3 py-2"
-      />
-      {error && (
-        <p role="alert" className="text-sm text-red-600">
-          {error}
-        </p>
-      )}
-      {entries?.length === 0 && (
-        <p className="opacity-70">{query ? 'No matching words.' : 'No words yet. Select a word while reading and choose Vocab.'}</p>
-      )}
-      {entries && entries.length > 0 && (
-        <ul className="divide-y divide-gray-300/50">
-          {entries.map((entry) => {
-            const href = jumpHref(entry);
-            return (
-              <li key={entry.id} className="flex items-start gap-3 py-3">
-                <div className="min-w-0 flex-1 space-y-1 break-words">
-                  <p className="font-medium">{entry.term}</p>
-                  <p className={entry.meaning ? 'text-sm' : 'text-sm italic opacity-60'}>
-                    {entry.meaning ?? 'No meaning yet'}
-                  </p>
-                  {entry.sentence && <p className="text-sm italic opacity-80">{entry.sentence}</p>}
-                  <p className="text-xs opacity-60">{entry.bookTitle ?? 'Book deleted'}</p>
-                </div>
-                {href ? (
-                  <Link href={href} className="rounded px-2 py-1 text-sm hover:bg-gray-500/10">
-                    Jump
-                  </Link>
-                ) : (
-                  <button type="button" disabled className="rounded px-2 py-1 text-sm opacity-40">
-                    Jump
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => void remove(entry.id)}
-                  className="rounded px-2 py-1 text-sm text-red-600 hover:bg-red-500/10"
-                >
-                  Delete
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
     </main>
+  );
+}
+
+// A link in the accent colour, 44px tall like a button.
+const OPEN_LINK =
+  'inline-flex h-11 items-center rounded-[10px] px-3.5 text-sm text-accent hover:bg-chip focus-visible:outline-2 focus-visible:outline-accent';
+
+/** One saved word: the word, its meaning, the sentence it came from and its book. */
+function VocabRow({ entry, onDelete }: { entry: VocabEntryView; onDelete: () => void }) {
+  const href = jumpHref(entry);
+  return (
+    <li className="flex flex-col gap-1.5 border-b border-rule py-4">
+      <div className="flex flex-wrap items-center justify-between gap-x-3">
+        <span className="min-w-0 font-serif text-[21px] break-words">{entry.term}</span>
+        <div className="-mr-3.5 flex">
+          {href ? (
+            <Link href={href} className={OPEN_LINK}>
+              Open in book
+            </Link>
+          ) : (
+            <Button variant="quiet" disabled>
+              Open in book
+            </Button>
+          )}
+          <Button variant="danger" onClick={onDelete}>
+            Delete
+          </Button>
+        </div>
+      </div>
+      <p className={entry.meaning ? 'text-sm leading-normal' : 'text-sm text-muted italic'}>
+        {entry.meaning ?? 'No meaning yet'}
+      </p>
+      {entry.sentence && (
+        <p className="font-serif text-sm leading-normal break-words text-muted italic">“{entry.sentence}”</p>
+      )}
+      <span className="text-[11px] tracking-[0.06em] text-muted uppercase">{entry.bookTitle ?? 'Book deleted'}</span>
+    </li>
   );
 }
