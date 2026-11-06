@@ -278,14 +278,40 @@ async function epubWordBox(page: Page, frame: Frame, marker: string, word: strin
   return { ...inFrame, x: inFrame.x + frameBox.x, y: inFrame.y + frameBox.y };
 }
 
+/**
+ * The right edge of the part of the chapter that is on screen. The chapter's iframe is as wide as
+ * all its pages, and the elements around it clip it to the current page, so the next page can
+ * sit inside the window and still be hidden.
+ */
+async function epubVisibleRight(frame: Frame): Promise<number> {
+  return frame.evaluate(() => {
+    let right = window.top!.innerWidth;
+    for (let el = window.frameElement?.parentElement; el; el = el.parentElement) {
+      if (getComputedStyle(el).overflowX !== 'visible') right = Math.min(right, el.getBoundingClientRect().right);
+    }
+    return right;
+  });
+}
+
 /** The on-screen box of `word`, turning pages until it is on screen (a narrow screen paginates sooner). */
 async function epubWordOnScreen(page: Page, frame: Frame, marker: string, word: string): Promise<Box> {
-  const viewport = page.viewportSize()!;
+  const right = await epubVisibleRight(frame);
   let box = await epubWordBox(page, frame, marker, word);
-  for (let turns = 0; box.x + box.width > viewport.width && turns < 10; turns++) {
+  for (let turns = 0; box.x + box.width > right && turns < 10; turns++) {
     const before = box.x;
-    await page.getByRole('button', { name: 'Next page' }).click();
-    await expect.poll(async () => (await epubWordBox(page, frame, marker, word)).x).not.toBe(before);
+    // foliate ignores a page turn asked for within 100 ms of the last one, so a click the reader
+    // dropped is clicked again. The 300 ms between tries is long enough that an accepted turn
+    // has always moved the text, so this never turns two pages.
+    await expect
+      .poll(
+        async () => {
+          const x = (await epubWordBox(page, frame, marker, word)).x;
+          if (x === before) await page.getByRole('button', { name: 'Next page' }).click();
+          return x;
+        },
+        { intervals: [300] },
+      )
+      .not.toBe(before);
     box = await epubWordBox(page, frame, marker, word);
   }
   return box;

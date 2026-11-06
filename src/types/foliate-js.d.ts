@@ -7,7 +7,11 @@ declare module 'foliate-js/view.js' {
   };
   export function makeBook(file: File): Promise<FoliateBook>;
 
-  export type RelocateDetail = { cfi: string };
+  /**
+   * Detail of the view's `relocate` event. `fraction` is how far through the whole book the
+   * current page ends, 0 to 1 (by section sizes; see SectionProgress in progress.js).
+   */
+  export type RelocateDetail = { cfi: string; fraction?: number };
   /** Detail of the view's `load` event: a section's document has been rendered. */
   export type SectionLoadDetail = { doc: Document; index: number };
   export class View extends HTMLElement {

@@ -29,7 +29,7 @@ declare global {
   }
 }
 
-type Loaded = { format: BookFormat; fileUrl: string; location: ReadingLocation | null };
+type Loaded = { title: string; format: BookFormat; fileUrl: string; location: ReadingLocation | null };
 
 /** The thread in the panel: an existing one, or a new one on the picked selection. Each opening gets its own key. */
 type OpenThread = { key: number } & (
@@ -43,9 +43,13 @@ async function load(bookId: string): Promise<Loaded> {
     fetch(`/api/books/${bookId}/position`),
   ]);
   if (!book.ok || !position.ok) throw new Error('load failed');
-  const { format, fileUrl } = (await book.json()) as { format: BookFormat; fileUrl: string };
+  const { title, format, fileUrl } = (await book.json()) as {
+    title: string;
+    format: BookFormat;
+    fileUrl: string;
+  };
   const { location } = (await position.json()) as { location: ReadingLocation | null };
-  return { format, fileUrl, location };
+  return { title, format, fileUrl, location };
 }
 
 /** The book's highlights, or null when they cannot be loaded. Never rejects. */
@@ -253,6 +257,7 @@ export function ReadView({ bookId, threadId, at }: Props) {
         <div className={bookClass}>
           <EpubReader
             bookId={bookId}
+            title={loaded.title}
             fileUrl={loaded.fileUrl}
             initialCfi={initialCfi}
             onSelection={onSelection}
@@ -271,6 +276,7 @@ export function ReadView({ bookId, threadId, at }: Props) {
       <div className={bookClass}>
         <PdfReader
           bookId={bookId}
+          title={loaded.title}
           fileUrl={loaded.fileUrl}
           initialPage={initialPage}
           onSelection={onSelection}

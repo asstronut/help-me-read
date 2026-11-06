@@ -71,6 +71,40 @@ test('typing a page number jumps to it', async ({ page }) => {
   await expect(currentPage(page)).toBeInViewport({ ratio: 0.5 });
 });
 
+test('the keyboard turns pages, but not while typing a page number', async ({ page }) => {
+  const id = await addSamplePdf(page);
+  await page.goto(`/read/${id}`);
+  await expect(currentPage(page).locator('canvas')).toBeVisible();
+
+  await page.keyboard.press('ArrowRight');
+  await expect(currentPage(page)).toHaveAttribute('data-page-number', '2');
+  await page.keyboard.press('PageDown');
+  await expect(currentPage(page)).toHaveAttribute('data-page-number', '3');
+  await page.keyboard.press('ArrowLeft');
+  await expect(currentPage(page)).toHaveAttribute('data-page-number', '2');
+  await page.keyboard.press('Shift+Space');
+  await expect(currentPage(page)).toHaveAttribute('data-page-number', '1');
+  await page.keyboard.press('Space');
+  await expect(currentPage(page)).toHaveAttribute('data-page-number', '2');
+
+  // In the page number field the keys move the caret instead.
+  await pageInput(page).click();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('PageDown');
+  await page.waitForTimeout(500);
+  await expect(currentPage(page)).toHaveAttribute('data-page-number', '2');
+});
+
+test('the progress footer shows the page as a share of the page count', async ({ page }) => {
+  const id = await addSamplePdf(page);
+  await page.goto(`/read/${id}`);
+  const progress = page.getByRole('progressbar', { name: 'Reading progress' });
+  await expect(progress).toHaveAttribute('aria-valuenow', '33');
+  await expect(page.getByText('33%', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Next page' }).click();
+  await expect(progress).toHaveAttribute('aria-valuenow', '67');
+});
+
 test('scrolling down the pages moves the current page', async ({ page }) => {
   const id = await addSamplePdf(page);
   await page.goto(`/read/${id}`);

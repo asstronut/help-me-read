@@ -75,6 +75,12 @@ export const PlusIcon = (props: IconProps) => (
   </Icon>
 );
 
+export const MinusIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <path d="M5 12h14" />
+  </Icon>
+);
+
 /** Three dots in a row (⋯): more actions. */
 export const MoreIcon = (props: IconProps) => (
   <Icon fill="currentColor" stroke="none" {...props}>
