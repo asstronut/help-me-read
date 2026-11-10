@@ -5,6 +5,7 @@ import { IconButton } from '@/components/ui/IconButton';
 import { cn } from '@/components/ui/cn';
 import { ChevronRightIcon, MenuIcon } from '@/components/ui/icons';
 import { findItem, type ContentsItem } from '@/lib/reader/contents';
+import { PREFS, usePref } from '@/lib/reader/reading-prefs';
 import { TOUCH, WIDE, useMediaQuery } from './useMediaQuery';
 
 type Props = {
@@ -32,7 +33,7 @@ type OutlineProps = Props & {
 };
 
 /** The rail's width when open (the ☰ button alone is 44px). */
-export const RAIL_WIDTH = 240;
+export const RAIL_WIDTH = 216;
 
 type RailProps = Props & {
   /** False while a side panel is open: the rail then folds to its ☰ button. */
@@ -43,33 +44,46 @@ type RailProps = Props & {
   children: ReactNode;
   /** Classes for the rail itself (not the book), such as hiding it with the other controls. */
   outlineClassName?: string;
+  /**
+   * Keeps the rail's width free on the right too, so the book stays centred in the window (the
+   * default). Without it the book has all the room to the window's right edge.
+   */
+  balanced?: boolean;
 };
 
 /**
- * The book with its contents rail on the left: open (240px) when the window is wide and no side
- * panel needs the room, else just the ☰ button (44px). The same width is kept free on the right,
- * so the book stays centred. On a phone there is no rail (the ☰ button is in the top bar). On a
+ * The book with its contents rail on the left: open (216px) when the window is wide and no side
+ * panel needs the room, else just the ☰ button (44px). Whether it is open is remembered. The same
+ * width is kept free on the right, so the book stays centred, unless `balanced` is off. On a phone there is no rail (the ☰ button is in the top bar). On a
  * tablet it is just the ☰ button too, so a page held sideways has room for two columns.
  */
-export function ContentsRail({ roomBeside, top, children, className, outlineClassName, ...props }: RailProps) {
+export function ContentsRail({
+  roomBeside,
+  top,
+  children,
+  className,
+  outlineClassName,
+  balanced = true,
+  ...props
+}: RailProps) {
   const wide = useMediaQuery(WIDE);
   const touch = useMediaQuery(TOUCH);
   const docked = wide && !touch && roomBeside;
-  const [railOpen, setRailOpen] = useState(true);
+  const [railOpen, setRailOpen] = usePref(PREFS.contentsOpen);
   const width = docked && railOpen ? RAIL_WIDTH : 44;
   return (
-    <div className={cn('flex min-h-0 flex-1 sm:px-7', className)}>
+    <div className={cn('flex min-h-0 flex-1', balanced ? 'sm:px-7' : 'sm:pl-7', className)}>
       <ContentsOutline
         {...props}
         placement="rail"
         docked={docked}
         railOpen={railOpen}
-        onRailToggle={() => setRailOpen((o) => !o)}
+        onRailToggle={() => setRailOpen(!railOpen)}
         className={cn('hidden sm:flex', outlineClassName)}
         style={{ width, marginTop: top }}
       />
       <div className="flex min-w-0 flex-1">{children}</div>
-      <div aria-hidden="true" className="hidden sm:block" style={{ flex: `0 1 ${width}px` }} />
+      {balanced && <div aria-hidden="true" className="hidden sm:block" style={{ flex: `0 1 ${width}px` }} />}
     </div>
   );
 }
@@ -145,9 +159,9 @@ export function ContentsOutline({
         <div
           id={listId}
           className={cn(
-            'flex min-h-0 flex-col overflow-y-auto overscroll-contain',
+            'scrollbar-slim flex min-h-0 flex-col overflow-y-auto overscroll-contain',
             docked
-              ? 'pb-4'
+              ? 'pr-2 pb-4'
               : // Over the book: a card under the button (on a phone, across the width under the bar).
                 'z-30 max-h-[70dvh] rounded-xl border border-rule bg-surface px-3 py-2 text-ink shadow-[0_8px_24px_var(--shadow)]',
             !docked && placement === 'rail' && 'absolute top-12 -left-[13px] w-72',
@@ -160,6 +174,10 @@ export function ContentsOutline({
     </nav>
   );
 }
+
+/** A row of the list: compact for a mouse, a full 44px for a finger. */
+const ROW =
+  'flex min-h-8 w-full items-center rounded-lg py-1 text-left text-[13px] leading-snug pointer-coarse:min-h-11 pointer-coarse:text-sm';
 
 function ContentsList({
   items,
@@ -190,7 +208,7 @@ function ContentsList({
               type="button"
               aria-expanded={expanded}
               onClick={() => setToggled((t) => ({ ...t, [item.id]: !expanded }))}
-              className="flex min-h-11 w-full cursor-pointer items-center gap-2 rounded-lg text-left text-sm font-medium text-ink focus-visible:outline-2 focus-visible:outline-accent"
+              className={cn(ROW, 'cursor-pointer gap-2 font-medium text-ink focus-visible:outline-2 focus-visible:outline-accent')}
             >
               <ChevronRightIcon
                 size={14}
@@ -234,7 +252,8 @@ function Entry({
     </>
   );
   const classes = cn(
-    'flex min-h-11 w-full items-center gap-2.5 rounded-lg py-1 pl-1 text-left text-sm',
+    ROW,
+    'gap-2.5 pl-1',
     current ? 'text-ink' : 'text-muted',
   );
   if (!item.target) return <span className={classes}>{body}</span>;

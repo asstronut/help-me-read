@@ -3,18 +3,20 @@
 import { useState, type ComponentProps } from 'react';
 import { ChevronLeftIcon, ChevronRightIcon, MinusIcon, PlusIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
+import type { PdfFit } from '@/lib/reader/reading-prefs';
 
 type Props = {
   page: number;
   numPages: number;
   onPage: (page: number) => void;
-  /** Zoom relative to the fitted page (to the width, or the whole page): 1 is fitted. */
-  zoom: number;
-  /** Whether the page is fitted to the width, unzoomed. */
-  fittedToWidth: boolean;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
-  onFitWidth: () => void;
+  /** The page's size as a share of its real size: 1 is 100%. */
+  scale: number;
+  /** How the page is fitted; null once − or + has set a zoom of its own. */
+  fit: PdfFit | null;
+  /** Missing when there is no further step that way. */
+  onZoomIn?: () => void;
+  onZoomOut?: () => void;
+  onFit: (fit: PdfFit) => void;
   className?: string;
 };
 
@@ -41,14 +43,17 @@ export function PdfPageBar({
   page,
   numPages,
   onPage,
-  zoom,
-  fittedToWidth,
+  scale,
+  fit,
   onZoomIn,
   onZoomOut,
-  onFitWidth,
+  onFit,
   className,
 }: Props) {
   const [draft, setDraft] = useState<string | null>(null);
+  // One button for both fits, as in a browser's PDF viewer: it offers the one the page is not in.
+  const nextFit: PdfFit = fit === 'width' ? 'page' : 'width';
+  const fitLabel = nextFit === 'page' ? 'Fit to page' : 'Fit to width';
 
   function commit() {
     const typed = Number.parseInt(draft ?? '', 10);
@@ -83,30 +88,28 @@ export function PdfPageBar({
         <ChevronRightIcon size={16} />
       </BarButton>
       <Divider />
-      <BarButton aria-label="Zoom out" onClick={onZoomOut}>
+      <BarButton aria-label="Zoom out" disabled={!onZoomOut} onClick={onZoomOut}>
         <MinusIcon size={16} />
       </BarButton>
-      {/* Relative to the fitted page, which is 100%. Hidden on a phone to keep the bar on screen. */}
-      <span className="hidden w-11 text-center tabular-nums sm:inline">{Math.round(zoom * 100)}%</span>
-      <BarButton aria-label="Zoom in" onClick={onZoomIn}>
+      {/* Hidden on a phone to keep the bar on screen. */}
+      <span className="hidden w-11 text-center tabular-nums sm:inline">{Math.round(scale * 100)}%</span>
+      <BarButton aria-label="Zoom in" disabled={!onZoomIn} onClick={onZoomIn}>
         <PlusIcon size={16} />
       </BarButton>
       <Divider />
       <button
         type="button"
-        aria-label="Fit to width"
-        aria-pressed={fittedToWidth}
-        onClick={onFitWidth}
+        aria-label={fitLabel}
+        onClick={() => onFit(nextFit)}
         className={cn(
           'my-1.5 inline-flex h-8 shrink-0 cursor-pointer items-center rounded-lg px-3 transition-colors',
           // The visible part of the button is 32px, but the area it answers to is the bar's full 44px.
           'relative after:absolute after:inset-x-0 after:-inset-y-1.5',
-          'focus-visible:outline-2 focus-visible:outline-accent',
-          fittedToWidth ? 'bg-chip' : 'hover:bg-chip',
+          'hover:bg-chip focus-visible:outline-2 focus-visible:outline-accent',
         )}
       >
         <span className="sm:hidden">Fit</span>
-        <span className="hidden sm:inline">Fit to width</span>
+        <span className="hidden sm:inline">{fitLabel}</span>
       </button>
     </nav>
   );
