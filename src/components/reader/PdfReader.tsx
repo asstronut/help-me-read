@@ -183,6 +183,18 @@ export default function PdfReader({
     if (tapped.length > 0) onHighlightTap(tapped);
   }
 
+  /**
+   * Shows a drawn page's canvas at exactly its pixel size. react-pdf rounds the canvas's pixels and
+   * its size on screen separately, so they can differ by up to a pixel; the browser then stretches
+   * the picture to fit, which blurs the text.
+   */
+  function showAtPixelSize(pageNumber: number) {
+    const canvas = scrollRef.current?.querySelector<HTMLCanvasElement>(`[data-slot="${pageNumber}"] canvas`);
+    if (!canvas) return;
+    canvas.style.width = `${canvas.width / window.devicePixelRatio}px`;
+    canvas.style.height = `${canvas.height / window.devicePixelRatio}px`;
+  }
+
   function onScroll() {
     const el = scrollRef.current;
     const visible = el && mostVisiblePage(el);
@@ -276,7 +288,12 @@ export default function PdfReader({
                       style={{ width: pageWidth, minHeight: pageWidth * aspect }}
                     >
                       {Math.abs(n - page) <= RENDER_AROUND && (
-                        <Page pageNumber={n} width={pageWidth} renderAnnotationLayer={false}>
+                        <Page
+                          pageNumber={n}
+                          width={pageWidth}
+                          renderAnnotationLayer={false}
+                          onRenderSuccess={() => showAtPixelSize(n)}
+                        >
                           <PdfHighlightLayer highlights={highlights.filter((h) => onPdfPage(h, n))} />
                         </Page>
                       )}

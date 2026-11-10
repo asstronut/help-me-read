@@ -176,8 +176,8 @@ test('a green note on a PDF page keeps its note and its words at any zoom', asyn
   await editor(page).getByRole('button', { name: 'Close' }).click();
 
   const before = (await note.boundingBox())!;
-  await page.getByRole('button', { name: 'Zoom in' }).click();
-  await page.getByRole('button', { name: 'Zoom in' }).click();
+  // Three steps up from the fitted page are at least 1.4 times its size, whatever the window's width.
+  for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
   await showPdfPage(page, 3);
   await expect.poll(async () => (await note.boundingBox())?.width ?? 0).toBeGreaterThan(before.width * 1.3);
   await expect
