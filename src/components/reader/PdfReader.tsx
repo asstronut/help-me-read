@@ -5,6 +5,7 @@ import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { currentPdfItem, pdfContents, type ContentsItem } from '@/lib/reader/contents';
 import { listenForPageKeys } from '@/lib/reader/page-keys';
+import { CSS_PX_PER_POINT, zoomStep } from '@/lib/reader/pdf-zoom';
 import { PREFS, usePref, type PdfFit } from '@/lib/reader/reading-prefs';
 import { capturePdfSelection } from '@/lib/selection/capture-pdf';
 import { watchTaps } from '@/lib/selection/tap';
@@ -44,14 +45,8 @@ type Props = {
   onContents: (items: ContentsItem[]) => void;
 };
 
-const MAX_FIT_WIDTH = 800;
-const MIN_ZOOM = 0.5;
-const MAX_ZOOM = 3;
-const ZOOM_STEP = 0.25;
 // Pages this far from the current one are drawn; the rest are sized placeholders.
 const RENDER_AROUND = 1;
-
-const clampZoom = (z: number) => Math.min(Math.max(z, MIN_ZOOM), MAX_ZOOM);
 
 /** The page taking up the most of the visible area. */
 function mostVisiblePage(container: HTMLElement): number | null {
@@ -90,9 +85,12 @@ export default function PdfReader({
   const [contents, setContents] = useState<ContentsItem[] | null>(null);
   // height / width of the first page, used to size pages that are not drawn
   const [aspect, setAspect] = useState(0);
+  // The first page's real width, in CSS pixels: what 100% means.
+  const [realWidth, setRealWidth] = useState(0);
   const [page, setPage] = useState(initialPage);
-  const [zoom, setZoom] = useState(1);
   const [fit, setFit] = usePref(PREFS.pdfFit);
+  // A zoom picked with − and +, as a share of the real size; null while the page is fitted.
+  const [zoom, setZoom] = useState<number | null>(null);
   const [keepColours, setKeepColours] = usePref(PREFS.keepPdfColours);
   // The pages' column, inside its padding: the room a fitted page has.
   const [container, setContainer] = useState({ width: 0, height: 0 });
@@ -111,7 +109,8 @@ export default function PdfReader({
     const el = scrollRef.current;
     if (!el) return;
     const observer = new ResizeObserver(([entry]) =>
-      setContainer({ width: entry.contentRect.width, height: entry.contentRect.height }),
+      // The width inside the padding; the whole visible height, as the bottom padding is not shown until the end.
+      setContainer({ width: entry.contentRect.width, height: el.clientHeight }),
     );
     observer.observe(el);
     return () => observer.disconnect();
@@ -190,14 +189,17 @@ export default function PdfReader({
     if (visible) setPage(visible);
   }
 
-  // Whole page also keeps the page's height within the column, above the room left for the page bar.
-  const widthFit = Math.min(container.width, MAX_FIT_WIDTH);
-  const fitted = fit === 'page' && aspect > 0 ? Math.min(widthFit, container.height / aspect) : widthFit;
-  const pageWidth = fitted * zoom;
+  // Whole page: one page fills the column's height exactly, so no other page shows beside it.
+  const fitted =
+    fit === 'page' && aspect > 0 ? Math.min(container.width, Math.floor(container.height / aspect)) : container.width;
+  const pageWidth = zoom === null ? fitted : realWidth * zoom;
+  const scale = realWidth > 0 ? pageWidth / realWidth : 0;
+  const zoomIn = zoomStep(scale, 1);
+  const zoomOut = zoomStep(scale, -1);
 
   function chooseFit(next: PdfFit) {
     setFit(next);
-    setZoom(1);
+    setZoom(null);
   }
   const ready = numPages > 0 && aspect > 0 && pageWidth > 0;
 
@@ -231,14 +233,14 @@ export default function PdfReader({
       </ReaderTopBar>
       {status}
       {/* The pages start at the top of their column: line the ☰ icon (13px into its box) up with them. */}
-      <ContentsRail {...outline} roomBeside={roomBeside} top={-13} className="sm:gap-6">
+      <ContentsRail {...outline} roomBeside={roomBeside} top={-13} className="sm:gap-6" balanced={false}>
         <div className="relative min-h-0 min-w-0 flex-1">
           <div
             ref={scrollRef}
             onScroll={onScroll}
             onClick={onClick}
             // Room at the bottom so the last page can scroll up clear of the page bar.
-            className="h-full overflow-auto pb-24"
+            className="scrollbar-slim h-full overflow-auto pb-24 [scrollbar-gutter:stable] sm:pr-3"
           >
             {error && (
               <p role="alert" className="p-4 text-sm text-red-600">
@@ -257,6 +259,7 @@ export default function PdfReader({
                 return doc.getPage(1).then((first) => {
                   const { width, height } = first.getViewport({ scale: 1 });
                   setAspect(height / width);
+                  setRealWidth(width * CSS_PX_PER_POINT);
                   setNumPages(doc.numPages);
                   setPage((p) => Math.min(p, doc.numPages));
                 }, () => setError(true));
@@ -287,11 +290,11 @@ export default function PdfReader({
             page={page}
             numPages={numPages}
             onPage={goTo}
-            zoom={zoom}
-            fittedToWidth={fit === 'width' && zoom === 1}
-            onZoomIn={() => setZoom((z) => clampZoom(z + ZOOM_STEP))}
-            onZoomOut={() => setZoom((z) => clampZoom(z - ZOOM_STEP))}
-            onFitWidth={() => chooseFit('width')}
+            scale={scale}
+            fit={zoom === null ? fit : null}
+            onZoomIn={zoomIn === null ? undefined : () => setZoom(zoomIn)}
+            onZoomOut={zoomOut === null ? undefined : () => setZoom(zoomOut)}
+            onFit={chooseFit}
             className="absolute bottom-3 left-1/2 -translate-x-1/2 sm:bottom-5"
           />
         </div>

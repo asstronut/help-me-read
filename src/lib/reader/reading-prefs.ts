@@ -31,6 +31,7 @@ export const PREFS = {
   lineSpacing: { key: 'hmr.lineSpacing', values: LINE_SPACINGS, fallback: 'normal' } as Pref<LineSpacing>,
   lineWidth: { key: 'hmr.lineWidth', values: LINE_WIDTHS, fallback: 'medium' } as Pref<LineWidth>,
   pdfFit: { key: 'hmr.pdfFit', values: PDF_FITS, fallback: 'width' } as Pref<PdfFit>,
+  contentsOpen: { key: 'hmr.contentsOpen', values: [true, false], fallback: true } as Pref<boolean>,
   keepPdfColours: { key: 'hmr.keepPdfColours', values: [false, true], fallback: false } as Pref<boolean>,
 };
 

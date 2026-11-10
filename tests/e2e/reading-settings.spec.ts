@@ -193,12 +193,14 @@ async function pdfFit(page: Page) {
   });
 }
 
-test('Whole page fits the PDF page in the window, and Fit to width goes back', async ({ page }) => {
+test('Whole page fits the PDF page in the window, and the fit button in the bar goes back', async ({ page }) => {
   const id = await addBook(page, 'sample.pdf');
   await page.goto(`/read/${id}`);
   await expect(page.locator('.react-pdf__Page canvas').first()).toBeVisible();
+  // The bar's one fit button offers the fit the page is not in.
   const fitToWidth = page.getByRole('button', { name: 'Fit to width' });
-  await expect(fitToWidth).toHaveAttribute('aria-pressed', 'true');
+  const fitToPage = page.getByRole('button', { name: 'Fit to page' });
+  await expect(fitToPage).toBeVisible();
 
   await openSettings(page);
   const fit = settings(page).getByRole('radiogroup', { name: 'Page fit' });
@@ -208,7 +210,7 @@ test('Whole page fits the PDF page in the window, and Fit to width goes back', a
     const { pageHeight, viewHeight } = await pdfFit(page);
     return pageHeight <= viewHeight;
   }).toBe(true);
-  await expect(fitToWidth).toHaveAttribute('aria-pressed', 'false');
+  await expect(fitToWidth).toBeVisible();
 
   // The arrow keys move between the choices and don't turn the page.
   await fit.getByRole('radio', { name: 'Whole page' }).focus();
@@ -224,7 +226,7 @@ test('Whole page fits the PDF page in the window, and Fit to width goes back', a
   expect(pageHeight).toBeLessThanOrEqual(viewHeight);
 
   await fitToWidth.click();
-  await expect(fitToWidth).toHaveAttribute('aria-pressed', 'true');
+  await expect(fitToPage).toBeVisible();
   // On a phone the screen's width already limits the page, so both fits are the same size there.
   if (page.viewportSize()!.width >= 640) {
     await expect.poll(async () => (await pdfFit(page)).pageHeight).toBeGreaterThan(pageHeight);

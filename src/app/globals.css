@@ -98,6 +98,12 @@ body {
   color: var(--ink);
 }
 
+/* A scrolling area inside the reader: a thin bar in the theme's colours, with no track or arrows. */
+@utility scrollbar-slim {
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule) transparent;
+}
+
 /*
  * Dark inverts the page canvases, unless the reader keeps the PDF's colours (Aa, "Keep PDF colours
  * in Dark"); the PDF reader marks which with data-pdf-colours. Highlights are separate elements
