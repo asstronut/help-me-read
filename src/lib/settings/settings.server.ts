@@ -30,7 +30,7 @@ const SettingsSchema = z.object({
 });
 
 const FIELD_LABELS: Record<string, string> = {
-  explanationLanguage: 'Explanation language must be 1 to 40 characters',
+  explanationLanguage: 'The language to translate into must be 1 to 40 characters',
   actionModels: 'Choose a model from the list for each action',
   monthlyCapUsd: 'Monthly cap must be between 0 and 1000',
   theme: 'Theme must be light, dark or sepia',

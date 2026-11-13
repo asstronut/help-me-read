@@ -84,7 +84,7 @@ test('a stored model that is no longer available is dropped, so settings still s
   expect(error).toBeNull();
 
   await page.goto('/settings');
-  await page.getByLabel('Explanation language').fill('French');
+  await page.getByLabel('Translate into').selectOption('French');
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByText('Saved')).toBeVisible();
 
@@ -93,6 +93,18 @@ test('a stored model that is no longer available is dropped, so settings still s
   };
   expect(body.settings.explanationLanguage).toBe('French');
   expect(body.settings.actionModels).toEqual({});
+});
+
+test('Other… lets you type a language that is not in the list', async ({ page }) => {
+  await page.goto('/settings');
+  await expect(page.getByLabel('Language name')).toBeHidden();
+  await page.getByLabel('Translate into').selectOption('Other…');
+  await page.getByLabel('Language name').fill('Javanese');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByText('Saved')).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByLabel('Language name')).toHaveValue('Javanese');
 });
 
 test('the account section shows the email, and Sign out goes to the login page', async ({ page }) => {

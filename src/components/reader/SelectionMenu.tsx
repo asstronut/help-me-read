@@ -19,6 +19,7 @@ export type SelectionBox = { top: number; bottom: number; left: number; right: n
 type Props = {
   selection: ReaderSelection;
   box: SelectionBox;
+  language: string | null;
   onPick: (item: MenuItem) => void;
   onColor: (color: HighlightColor) => void;
 };
@@ -60,7 +61,7 @@ function placeNear(box: SelectionBox, width: number, height: number) {
 const keepSelection = (e: MouseEvent) => e.preventDefault();
 
 /** The menu for a selection: docked to the bottom on a phone, above the selection otherwise. */
-export function SelectionMenu({ selection, box, onPick, onColor }: Props) {
+export function SelectionMenu({ selection, box, language, onPick, onColor }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState<{ top: number; left: number } | null>(null);
 
@@ -119,6 +120,9 @@ export function SelectionMenu({ selection, box, onPick, onColor }: Props) {
               ) : (
                 <button key={item} type="button" onClick={() => onPick(item)} className={ACTION}>
                   {LABELS[item]}
+                  {item === 'translate' && language && (
+                    <span className="max-w-[12ch] truncate text-muted">{` to ${language}`}</span>
+                  )}
                 </button>
               ),
             )}

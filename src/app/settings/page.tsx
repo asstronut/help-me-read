@@ -15,6 +15,7 @@ import { ACTIONS, type Action, type Theme } from '@/lib/types';
 type ModelView = ModelInfo & { available: boolean };
 
 const LANGUAGES = ['English', 'Indonesian', 'Spanish', 'French', 'German', 'Japanese', 'Chinese', 'Arabic'];
+const OTHER_LANGUAGE = 'other';
 // Each card wears its own theme's class, so the tokens inside it are that theme's colours.
 const THEME_OPTIONS: SegmentOption<Theme>[] = [
   { value: 'light', label: 'Light', className: 'light bg-bg text-ink' },
@@ -44,6 +45,8 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  // "Other…" is picked, so the language is typed instead of chosen from the list.
+  const [typingLanguage, setTypingLanguage] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -69,6 +72,7 @@ export default function SettingsPage() {
           Object.entries(body.settings.actionModels).filter(([, id]) => availableIds.has(id)),
         );
         setSettings({ ...body.settings, actionModels });
+        setTypingLanguage(!LANGUAGES.includes(body.settings.explanationLanguage));
         setCap(String(body.settings.monthlyCapUsd));
         setSpend(body.monthSpendUsd);
         setModels(modelList.filter((x) => x.available));
@@ -89,6 +93,12 @@ export default function SettingsPage() {
     const rest = { ...settings.actionModels };
     delete rest[action];
     change({ actionModels: modelId === '' ? rest : { ...rest, [action]: modelId } });
+  }
+
+  function chooseLanguage(choice: string) {
+    const typing = choice === OTHER_LANGUAGE;
+    setTypingLanguage(typing);
+    change({ explanationLanguage: typing ? '' : choice });
   }
 
   async function signOut() {
@@ -156,24 +166,50 @@ export default function SettingsPage() {
                   onChange={(theme) => change({ theme })}
                 />
               </div>
-              <label className="flex flex-col gap-1.5 text-[13px]">
-                <span className="font-medium">Explanation language</span>
-                <input
-                  list="languages"
-                  value={settings.explanationLanguage}
-                  maxLength={40}
-                  onChange={(e) => change({ explanationLanguage: e.target.value })}
-                  className={cn(FIELD, 'px-3.5')}
-                />
-                <datalist id="languages">
-                  {LANGUAGES.map((l) => (
-                    <option key={l} value={l} />
-                  ))}
-                </datalist>
+            </Section>
+
+            <Section title="Language" hint="The language the AI answers you in.">
+              <div className="flex flex-col gap-1.5 text-[13px]">
+                <label className="flex flex-col gap-1.5">
+                  <span className="font-medium">Translate into</span>
+                  <span className="relative flex max-w-[280px]">
+                    <select
+                      value={typingLanguage ? OTHER_LANGUAGE : settings.explanationLanguage}
+                      onChange={(e) => chooseLanguage(e.target.value)}
+                      className={cn(FIELD, 'w-full appearance-none pr-9 pl-3.5')}
+                    >
+                      {LANGUAGES.map((l) => (
+                        <option key={l} value={l}>
+                          {l}
+                        </option>
+                      ))}
+                      <option value={OTHER_LANGUAGE}>Other…</option>
+                    </select>
+                    <ChevronDownIcon
+                      size={14}
+                      className="pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-muted"
+                    />
+                  </span>
+                </label>
+                {typingLanguage && (
+                  <label className="mt-1 flex flex-col gap-1.5">
+                    <span className="font-medium">Language name</span>
+                    <input
+                      value={settings.explanationLanguage}
+                      maxLength={40}
+                      required
+                      autoFocus
+                      placeholder="e.g. Javanese"
+                      onChange={(e) => change({ explanationLanguage: e.target.value })}
+                      className={cn(FIELD, 'max-w-[280px] px-3.5')}
+                    />
+                  </label>
+                )}
                 <span className="text-muted">
-                  Answers to Translate, Define, Explain and the rest come back in this language.
+                  Translate turns the text you select into this language. Define, Explain, Simplify and Ask answer
+                  in it too.
                 </span>
-              </label>
+              </div>
             </Section>
 
             <Section

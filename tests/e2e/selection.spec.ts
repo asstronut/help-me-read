@@ -106,7 +106,7 @@ test.beforeEach(async ({ page }) => {
 test('a single word puts Define first', async ({ page }) => {
   await openPdf(page);
   await doubleClickPdfWord(page, 'steep');
-  await expect(actions(page)).toHaveText(['Define', 'Translate', 'Explain', 'Simplify', 'Ask…', 'Vocab']);
+  await expect(actions(page)).toHaveText(['Define', /^Translate( to |$)/, 'Explain', 'Simplify', 'Ask…', 'Vocab']);
   await expect(menu(page).getByRole('group', { name: 'Highlight colour' }).getByRole('button')).toHaveCount(4);
   expect((await currentSelection(page))?.text).toBe('steep');
 });
@@ -118,7 +118,7 @@ test('a phrase puts Explain first', async ({ page }) => {
     { pageNumber: 1, text: 'The bank was steep.', edge: 'start' },
     { pageNumber: 1, text: 'The bank was steep.', edge: 'end' },
   );
-  await expect(actions(page)).toHaveText(['Explain', 'Translate', 'Define', 'Simplify', 'Ask…', 'Vocab']);
+  await expect(actions(page)).toHaveText(['Explain', /^Translate( to |$)/, 'Define', 'Simplify', 'Ask…', 'Vocab']);
   const selection = await currentSelection(page);
   expect(selection?.text).toBe('The bank was steep.');
   expect(selection?.anchor).toMatchObject({ format: 'pdf', page: 1 });

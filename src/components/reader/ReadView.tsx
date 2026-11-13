@@ -109,9 +109,11 @@ type Props = {
   threadId: string | null;
   /** Opens the book here instead of at the saved position. */
   at: Anchor | null;
+  /** The language Translate goes into, shown on its button; null when unknown. */
+  language: string | null;
 };
 
-export function ReadView({ bookId, threadId, at }: Props) {
+export function ReadView({ bookId, threadId, at, language }: Props) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [failed, setFailed] = useState(false);
   const [current, setCurrent] = useState<Current | null>(null);
@@ -254,6 +256,7 @@ export function ReadView({ bookId, threadId, at }: Props) {
         <SelectionMenu
           selection={current.selection}
           box={current.box}
+          language={language}
           onPick={onPick}
           onColor={onColor}
         />
