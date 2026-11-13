@@ -149,7 +149,23 @@ const contentsEpub = () =>
 </ol>`,
   );
 
-type Bookmark = { title: string; page?: number; children?: Bookmark[] };
+/** A chapter wrapped in a div that sets its own font and line height, as many publishers' books do. */
+const styledEpub = () =>
+  makeEpub(
+    'Styled Book',
+    [
+      {
+        id: 'ch1',
+        title: 'One',
+        body: `<div style="font-family: monospace; line-height: 1">\n${Array.from({ length: 3 }, (_, i) => `<p>${paragraph(i + 1)}</p>`).join('\n')}\n</div>`,
+      },
+    ],
+    `<ol>
+<li><a href="ch1.xhtml">One</a></li>
+</ol>`,
+  );
+
+type Bookmark ={ title: string; page?: number; children?: Bookmark[] };
 
 /**
  * Adds a bookmark tree (the PDF's /Outlines) to the document. Each bookmark with a page goes to
@@ -219,4 +235,5 @@ writeFileSync(join(dir, 'sample.pdf'), await makePdf());
 writeFileSync(join(dir, 'sample.epub'), await sampleEpub());
 writeFileSync(join(dir, 'contents.pdf'), await makeContentsPdf());
 writeFileSync(join(dir, 'contents.epub'), await contentsEpub());
-console.log('Wrote sample.pdf, sample.epub, contents.pdf and contents.epub');
+writeFileSync(join(dir, 'styled.epub'), await styledEpub());
+console.log('Wrote sample.pdf, sample.epub, contents.pdf, contents.epub and styled.epub');

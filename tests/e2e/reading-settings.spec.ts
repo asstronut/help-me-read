@@ -5,7 +5,7 @@ test.use({ storageState: 'tests/e2e/.auth/owner.json' });
 
 const DEFAULTS = { explanationLanguage: 'English', actionModels: {}, monthlyCapUsd: 10, theme: 'light' };
 
-async function addBook(page: Page, fixture: 'sample.epub' | 'sample.pdf'): Promise<string> {
+async function addBook(page: Page, fixture: 'sample.epub' | 'styled.epub' | 'sample.pdf'): Promise<string> {
   const format = fixture.endsWith('.pdf') ? 'pdf' : 'epub';
   const created = await page.request.post('/api/books', {
     data: { title: 'Settings Book', author: null, format, sizeBytes: 100 },
@@ -90,6 +90,17 @@ test('the typeface sets the text in Sans or Atkinson Hyperlegible, and survives 
 
   await page.reload();
   await expect.poll(async () => (await paragraph(page)).family).toMatch(/^"?Atkinson Hyperlegible"?,/);
+});
+
+test('the typeface and line spacing win over a font the book sets on a wrapping element', async ({ page }) => {
+  const id = await addBook(page, 'styled.epub');
+  await page.goto(`/read/${id}`);
+  await expect.poll(async () => (await paragraph(page)).family).toMatch(/^"?Literata"?,/);
+  await expect.poll(async () => (await paragraph(page)).lineHeight).toBe(1.7);
+
+  await openSettings(page);
+  await settings(page).getByRole('radiogroup', { name: 'Typeface' }).getByRole('radio', { name: 'Sans' }).click();
+  await expect.poll(async () => (await paragraph(page)).family).toMatch(/^"?Geist"?,/);
 });
 
 test('line spacing sets the line height, and the arrow keys move between the choices', async ({ page }) => {
