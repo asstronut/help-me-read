@@ -120,7 +120,8 @@ let readingFontFaces: string | null = null;
 /**
  * The chapter's styles: font size, typeface and line height, and the page's theme colours. The
  * chapter is drawn in an iframe, which inherits none of the page's fonts or CSS variables, so
- * they are copied in here.
+ * they are copied in here. The typeface is set on each text block rather than inherited from the
+ * body, since many books wrap every chapter in a div that names its own font.
  */
 function readerCss(look: Look): string {
   const theme = getComputedStyle(document.documentElement);
@@ -136,8 +137,10 @@ function readerCss(look: Look): string {
   return `${readingFontFaces}
 html, body, p { font-size: ${look.fontSize}px !important; }
 html, body { background: ${bg} !important; color: ${ink} !important; }
-html, body { font-family: ${family} !important; line-height: ${LINE_HEIGHTS[look.lineSpacing]} !important; }
-p, li, blockquote, dd, dt { font-family: inherit !important; line-height: inherit !important; }`;
+html, body, div, section, article, p, li, blockquote, dd, dt {
+  font-family: ${family} !important;
+  line-height: ${LINE_HEIGHTS[look.lineSpacing]} !important;
+}`;
 }
 
 /** Applies the reading styles, and a line width that follows the font size, to the view. */
