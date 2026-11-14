@@ -3,8 +3,10 @@
 import { useId, useRef, useState, type ReactNode } from 'react';
 import { IconButton } from '@/components/ui/IconButton';
 import { InlineAlert } from '@/components/ui/InlineAlert';
+import { LanguagePicker } from '@/components/ui/LanguagePicker';
 import { SegmentedControl, type SegmentOption } from '@/components/ui/SegmentedControl';
 import { cn } from '@/components/ui/cn';
+import { LANGUAGE_LABELS, type BookLanguages, type Languages } from '@/lib/languages';
 import {
   FONT_SIZES,
   type FontSize,
@@ -216,6 +218,36 @@ export function TypographyOptions(props: TypographyProps) {
         />
       </Row>
     </>
+  );
+}
+
+type LanguageProps = {
+  languages: BookLanguages;
+  onChoose: (field: keyof Languages, language: string | null) => void;
+  /** Why the last change could not be saved. */
+  error: string | null;
+};
+
+/**
+ * The book's languages. Each picker starts on the default, which the book follows until the
+ * reader picks a language for this book alone.
+ */
+export function LanguageOptions({ languages, onChoose, error }: LanguageProps) {
+  return (
+    <Field caption="Language">
+      <div role="group" aria-label="Language" className="flex flex-col gap-3">
+        {(['translation', 'answer'] as const).map((field) => (
+          <LanguagePicker
+            key={field}
+            label={LANGUAGE_LABELS[field]}
+            value={languages.overrides[field]}
+            defaultLanguage={languages.defaults[field]}
+            onChange={(language: string | null) => onChoose(field, language)}
+          />
+        ))}
+      </div>
+      {error && <InlineAlert>{error}</InlineAlert>}
+    </Field>
   );
 }
 

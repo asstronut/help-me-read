@@ -299,3 +299,15 @@ test("the Translate button names the book's Translation language", async ({ page
   await doubleClickPdfWord(page, 'steep');
   await expect(menu(page).getByRole('button', { name: 'Translate to Japanese' })).toBeVisible();
 });
+
+test('a language chosen in Aa shows on the Translate button without a reload', async ({ page }) => {
+  await openPdf(page);
+  await page.getByRole('button', { name: 'Reading settings' }).click();
+  const settings = page.getByRole('dialog', { name: 'Reading settings' });
+  await settings.getByRole('combobox', { name: 'Translate into' }).selectOption('Japanese');
+  await page.keyboard.press('Escape');
+  await expect(settings).toBeHidden();
+
+  await doubleClickPdfWord(page, 'steep');
+  await expect(menu(page).getByRole('button', { name: 'Translate to Japanese' })).toBeVisible();
+});

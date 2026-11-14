@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type {
   DrawAnnotationDetail,
   RelocateDetail,
@@ -47,6 +47,8 @@ type Props = {
   roomBeside: boolean;
   highlightsOpen: boolean;
   onHighlights: () => void;
+  /** The book's languages, last in Aa. */
+  languageOptions: ReactNode;
   /** Filled in by the reader, so the page around it can move it to a highlight. */
   controlsRef: { current: ReaderControls | null };
 };
@@ -205,6 +207,7 @@ export default function EpubReader({
   roomBeside,
   highlightsOpen,
   onHighlights,
+  languageOptions,
   controlsRef,
 }: Props) {
   const [fontSize, setFontSize] = usePref(PREFS.fontSize);
@@ -426,6 +429,7 @@ export default function EpubReader({
             lineWidth={lineWidth}
             onLineWidth={setLineWidth}
           />
+          {languageOptions}
         </ReadingSettings>
       </ReaderTopBar>
       {status}

@@ -26,7 +26,7 @@ async function Reader({ params, searchParams }: PageProps) {
   const { bookId } = await params;
   const { thread, at } = await searchParams;
   await connection();
-  // Only labels the Translate button, so the reader still opens if the languages cannot be read.
+  // The reader still opens without them: they only label Translate and fill the Language section of Aa.
   const languages = await getBookLanguages(await createClient(), bookId).catch(() => null);
   // `?thread=<id>` reopens that thread beside the book; `?at=` opens the book at an anchor.
   return (
@@ -34,7 +34,7 @@ async function Reader({ params, searchParams }: PageProps) {
       bookId={bookId}
       threadId={typeof thread === 'string' ? thread : null}
       at={parseAnchor(at)}
-      language={languages?.effective.translation ?? null}
+      languages={languages}
     />
   );
 }

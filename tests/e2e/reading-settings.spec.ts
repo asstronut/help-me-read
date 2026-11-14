@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { expect, test, type Frame, type Page } from '@playwright/test';
+import { expect, test, type Frame, type Locator, type Page } from '@playwright/test';
 import { DEFAULT_SETTINGS as DEFAULTS } from '../helpers/default-settings';
 
 test.use({ storageState: 'tests/e2e/.auth/owner.json' });
@@ -264,4 +264,84 @@ test('Keep PDF colours in Dark stops the page being inverted', async ({ page }) 
 
   await page.reload();
   await expect(canvas).toHaveCSS('filter', 'none');
+});
+
+const translateInto = (page: Page) => settings(page).getByRole('combobox', { name: 'Translate into' });
+const answerIn = (page: Page) => settings(page).getByRole('combobox', { name: 'Answer in' });
+const chosen = (select: Locator) => select.locator('option:checked');
+
+type Overrides = { translation: string | null; answer: string | null };
+
+async function savedOverrides(page: Page, bookId: string): Promise<Overrides> {
+  const body = (await (await page.request.get(`/api/books/${bookId}`)).json()) as {
+    translationLanguageOverride: string | null;
+    answerLanguageOverride: string | null;
+  };
+  return { translation: body.translationLanguageOverride, answer: body.answerLanguageOverride };
+}
+
+async function openPdfSettings(page: Page, bookId: string) {
+  await page.goto(`/read/${bookId}`);
+  await expect(page.locator('.react-pdf__Page canvas').first()).toBeVisible();
+  await openSettings(page);
+}
+
+test('the Language section starts on the defaults and saves a language for this book only', async ({ page }) => {
+  await page.request.put('/api/settings', { data: { ...DEFAULTS, translationLanguage: 'Indonesian' } });
+  const id = await addBook(page, 'sample.pdf');
+  const other = await addBook(page, 'sample.pdf');
+  await openPdfSettings(page, id);
+  await expect(chosen(translateInto(page))).toHaveText('Default (Indonesian)');
+  await expect(chosen(answerIn(page))).toHaveText('Default (English)');
+
+  await translateInto(page).selectOption('Japanese');
+  await expect.poll(() => savedOverrides(page, id)).toEqual({ translation: 'Japanese', answer: null });
+
+  await page.reload();
+  await openSettings(page);
+  await expect(chosen(translateInto(page))).toHaveText('Japanese');
+  await expect(chosen(answerIn(page))).toHaveText('Default (English)');
+
+  await openPdfSettings(page, other);
+  await expect(chosen(translateInto(page))).toHaveText('Default (Indonesian)');
+});
+
+test('choosing Default again clears the override, and a book follows a changed default', async ({ page }) => {
+  const id = await addBook(page, 'sample.pdf');
+  await openPdfSettings(page, id);
+  await answerIn(page).selectOption('Spanish');
+  await expect.poll(() => savedOverrides(page, id)).toEqual({ translation: null, answer: 'Spanish' });
+  await answerIn(page).selectOption({ label: 'Default (English)' });
+  await expect.poll(() => savedOverrides(page, id)).toEqual({ translation: null, answer: null });
+
+  await page.request.put('/api/settings', { data: { ...DEFAULTS, answerLanguage: 'French' } });
+  await openPdfSettings(page, id);
+  await expect(chosen(answerIn(page))).toHaveText('Default (French)');
+});
+
+test('Other… in the Language section saves a typed language when Enter is pressed', async ({ page }) => {
+  const id = await addBook(page, 'sample.pdf');
+  await openPdfSettings(page, id);
+  await answerIn(page).selectOption('Other…');
+  const typed = settings(page).getByRole('textbox', { name: 'Language name for Answer in' });
+  await expect(typed).toBeFocused();
+  await typed.fill('Javanese');
+  await typed.press('Enter');
+  await expect.poll(() => savedOverrides(page, id)).toEqual({ translation: null, answer: 'Javanese' });
+
+  await openPdfSettings(page, id);
+  await expect(typed).toHaveValue('Javanese');
+});
+
+test('a language that cannot be saved goes back and says so', async ({ page }) => {
+  const id = await addBook(page, 'sample.pdf');
+  await openPdfSettings(page, id);
+  await page.route(`**/api/books/${id}`, (route) =>
+    route.request().method() === 'PATCH'
+      ? route.fulfill({ status: 500, contentType: 'application/json', body: '{"message":"Could not save."}' })
+      : route.fallback(),
+  );
+  await translateInto(page).selectOption('Japanese');
+  await expect(settings(page).getByRole('alert')).toHaveText('Could not save.');
+  await expect(chosen(translateInto(page))).toHaveText('Default (English)');
 });

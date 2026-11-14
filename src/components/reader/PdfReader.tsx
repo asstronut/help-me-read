@@ -1,6 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { currentPdfItem, pdfContents, type ContentsItem } from '@/lib/reader/contents';
@@ -39,6 +47,8 @@ type Props = {
   roomBeside: boolean;
   highlightsOpen: boolean;
   onHighlights: () => void;
+  /** The book's languages, last in Aa. */
+  languageOptions: ReactNode;
   /** Filled in by the reader, so the page around it can move it to a highlight. */
   controlsRef: { current: ReaderControls | null };
   /** The PDF's bookmarks, once read (the highlights panel groups by them). */
@@ -77,6 +87,7 @@ export default function PdfReader({
   roomBeside,
   highlightsOpen,
   onHighlights,
+  languageOptions,
   controlsRef,
   onContents,
 }: Props) {
@@ -241,6 +252,7 @@ export default function PdfReader({
       >
         <ReadingSettings>
           <PdfOptions fit={fit} onFit={chooseFit} keepColours={keepColours} onKeepColours={setKeepColours} />
+          {languageOptions}
         </ReadingSettings>
       </ReaderTopBar>
       {status}
