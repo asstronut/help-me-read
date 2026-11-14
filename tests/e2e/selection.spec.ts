@@ -87,12 +87,16 @@ async function doubleClickPdfWord(page: Page, word: string) {
   await page.mouse.dblclick(box.x, box.y);
 }
 
-async function openPdf(page: Page) {
-  const id = await addBook(page, 'pdf');
+async function openPdfBook(page: Page, id: string) {
   await page.goto(`/read/${id}`);
   await expect(
     page.locator('.react-pdf__Page[data-page-number="1"] .react-pdf__Page__textContent'),
   ).toContainText('steep');
+}
+
+async function openPdf(page: Page) {
+  const id = await addBook(page, 'pdf');
+  await openPdfBook(page, id);
   return id;
 }
 
@@ -106,7 +110,7 @@ test.beforeEach(async ({ page }) => {
 test('a single word puts Define first', async ({ page }) => {
   await openPdf(page);
   await doubleClickPdfWord(page, 'steep');
-  await expect(actions(page)).toHaveText(['Define', 'Translate', 'Explain', 'Simplify', 'Ask…', 'Vocab']);
+  await expect(actions(page)).toHaveText(['Define', /^Translate( to |$)/, 'Explain', 'Simplify', 'Ask…', 'Vocab']);
   await expect(menu(page).getByRole('group', { name: 'Highlight colour' }).getByRole('button')).toHaveCount(4);
   expect((await currentSelection(page))?.text).toBe('steep');
 });
@@ -118,7 +122,7 @@ test('a phrase puts Explain first', async ({ page }) => {
     { pageNumber: 1, text: 'The bank was steep.', edge: 'start' },
     { pageNumber: 1, text: 'The bank was steep.', edge: 'end' },
   );
-  await expect(actions(page)).toHaveText(['Explain', 'Translate', 'Define', 'Simplify', 'Ask…', 'Vocab']);
+  await expect(actions(page)).toHaveText(['Explain', /^Translate( to |$)/, 'Define', 'Simplify', 'Ask…', 'Vocab']);
   const selection = await currentSelection(page);
   expect(selection?.text).toBe('The bank was steep.');
   expect(selection?.anchor).toMatchObject({ format: 'pdf', page: 1 });
@@ -281,4 +285,29 @@ test('an EPUB selection starting inside a word keeps the prefix glued to it', as
   const selection = (await currentSelection(page))!;
   expect(selection.text).toBe('ridges');
   expect(selection.prefix).toMatch(/P6 past old stone b$/);
+});
+
+test("the Translate button names the book's Translation language", async ({ page }) => {
+  const id = await openPdf(page);
+  await doubleClickPdfWord(page, 'steep');
+  await expect(menu(page).getByRole('button', { name: 'Translate to English' })).toBeVisible();
+
+  // The book's override wins over the default. Books are deleted before each test, so none is left behind.
+  const res = await page.request.patch(`/api/books/${id}`, { data: { translationLanguageOverride: 'Japanese' } });
+  expect(res.ok()).toBe(true);
+  await openPdfBook(page, id);
+  await doubleClickPdfWord(page, 'steep');
+  await expect(menu(page).getByRole('button', { name: 'Translate to Japanese' })).toBeVisible();
+});
+
+test('a language chosen in Aa shows on the Translate button without a reload', async ({ page }) => {
+  await openPdf(page);
+  await page.getByRole('button', { name: 'Reading settings' }).click();
+  const settings = page.getByRole('dialog', { name: 'Reading settings' });
+  await settings.getByRole('combobox', { name: 'Translate into' }).selectOption('Japanese');
+  await page.keyboard.press('Escape');
+  await expect(settings).toBeHidden();
+
+  await doubleClickPdfWord(page, 'steep');
+  await expect(menu(page).getByRole('button', { name: 'Translate to Japanese' })).toBeVisible();
 });

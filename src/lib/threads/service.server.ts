@@ -8,6 +8,8 @@ import { buildFirstUserMessage, buildSystemPrompt } from '@/lib/ai/prompts';
 import { getLanguageModel } from '@/lib/ai/registry.server';
 import { assertWithinCap } from '@/lib/ai/spend.server';
 import { buildContext } from '@/lib/context/build';
+import type { Languages } from '@/lib/languages';
+import { getBookLanguages } from '@/lib/languages.server';
 import { getSettings } from '@/lib/settings/settings.server';
 import { SelectionSchema } from '@/lib/selection/schema';
 import type { Database } from '@/lib/supabase/database.types';
@@ -78,6 +80,8 @@ export async function createThread(
   if (segmentError) throw segmentError;
   if (!segment) throw fail(400, 'The selection is in an unknown segment');
 
+  const bookLanguages = await getBookLanguages(supabase, bookId);
+  if (!bookLanguages) throw BOOK_NOT_FOUND();
   const { data: highlight, error: highlightError } = await supabase
     .from('highlights')
     .insert({
@@ -95,7 +99,13 @@ export async function createThread(
 
   const { data: thread, error: threadError } = await supabase
     .from('threads')
-    .insert({ highlight_id: highlight.id, action, context_scope: scope })
+    .insert({
+      highlight_id: highlight.id,
+      action,
+      context_scope: scope,
+      translation_language: bookLanguages.effective.translation,
+      answer_language: bookLanguages.effective.answer,
+    })
     .select('id')
     .single();
   if (threadError) {
@@ -111,6 +121,8 @@ type ThreadRecord = {
   id: string;
   action: Action;
   scope: ContextScope;
+  /** The languages the thread started with; a later change to the settings does not touch them. */
+  languages: Languages;
   highlightId: string;
   bookId: string;
   segmentSeq: number;
@@ -132,7 +144,7 @@ async function loadThread(supabase: Db, threadId: string): Promise<ThreadRecord>
   const { data, error } = await supabase
     .from('threads')
     .select(
-      'id, action, context_scope, highlight_id, highlights(book_id, segment_seq, quote, prefix, books(title, author, format))',
+      'id, action, context_scope, translation_language, answer_language, highlight_id, highlights(book_id, segment_seq, quote, prefix, books(title, author, format))',
     )
     .eq('id', threadId)
     .maybeSingle();
@@ -144,6 +156,7 @@ async function loadThread(supabase: Db, threadId: string): Promise<ThreadRecord>
     id: data.id,
     action: data.action as Action,
     scope: data.context_scope as ContextScope,
+    languages: { translation: data.translation_language, answer: data.answer_language },
     highlightId: data.highlight_id,
     bookId: highlight.book_id,
     segmentSeq: highlight.segment_seq,
@@ -394,7 +407,7 @@ export async function streamAnswer(
   const { turns, newQuestion } = turnsToAnswer(thread.action, history, input);
   const settings = await getSettings(supabase);
   const model = chooseModel(thread.action, settings.actionModels, input.modelId);
-  const instructions = buildSystemPrompt(thread.action, settings.explanationLanguage);
+  const instructions = buildSystemPrompt(thread.action, thread.languages);
   const messages = await promptMessages(supabase, thread, turns);
 
   const promptChars = [instructions, ...messages.map((m) => m.content)].join('\n\n').length;

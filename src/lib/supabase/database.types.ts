@@ -25,14 +25,14 @@ export type Database = {
           Tables: {
             "books": {
                   Row: {
-                    "author": string | null,"created_at": string,"extracted_at": string | null,"format": string,"id": string,"last_opened_at": string | null,"owner_id": string,"progress": number | null,"segment_count": number,"size_bytes": number,"storage_path": string,"title": string
+                    "answer_language_override": string | null,"author": string | null,"created_at": string,"extracted_at": string | null,"format": string,"id": string,"last_opened_at": string | null,"owner_id": string,"progress": number | null,"segment_count": number,"size_bytes": number,"storage_path": string,"title": string,"translation_language_override": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "author"?: string | null,"created_at"?: string,"extracted_at"?: string | null,"format": string,"id"?: string,"last_opened_at"?: string | null,"owner_id"?: string,"progress"?: number | null,"segment_count"?: number,"size_bytes": number,"storage_path": string,"title": string
+                    "answer_language_override"?: string | null,"author"?: string | null,"created_at"?: string,"extracted_at"?: string | null,"format": string,"id"?: string,"last_opened_at"?: string | null,"owner_id"?: string,"progress"?: number | null,"segment_count"?: number,"size_bytes": number,"storage_path": string,"title": string,"translation_language_override"?: string | null
                   }
                   Update: {
-                    "author"?: string | null,"created_at"?: string,"extracted_at"?: string | null,"format"?: string,"id"?: string,"last_opened_at"?: string | null,"owner_id"?: string,"progress"?: number | null,"segment_count"?: number,"size_bytes"?: number,"storage_path"?: string,"title"?: string
+                    "answer_language_override"?: string | null,"author"?: string | null,"created_at"?: string,"extracted_at"?: string | null,"format"?: string,"id"?: string,"last_opened_at"?: string | null,"owner_id"?: string,"progress"?: number | null,"segment_count"?: number,"size_bytes"?: number,"storage_path"?: string,"title"?: string,"translation_language_override"?: string | null
                   }
                   Relationships: [
                     
@@ -119,28 +119,28 @@ isOneToOne: false
                   ]
                 },"settings": {
                   Row: {
-                    "action_models": NonNullable<Json>,"explanation_language": string,"monthly_cap_usd": number,"owner_id": string,"theme": string
+                    "action_models": NonNullable<Json>,"answer_language": string,"monthly_cap_usd": number,"owner_id": string,"theme": string,"translation_language": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "action_models"?: NonNullable<Json>,"explanation_language"?: string,"monthly_cap_usd"?: number,"owner_id"?: string,"theme"?: string
+                    "action_models"?: NonNullable<Json>,"answer_language"?: string,"monthly_cap_usd"?: number,"owner_id"?: string,"theme"?: string,"translation_language"?: string
                   }
                   Update: {
-                    "action_models"?: NonNullable<Json>,"explanation_language"?: string,"monthly_cap_usd"?: number,"owner_id"?: string,"theme"?: string
+                    "action_models"?: NonNullable<Json>,"answer_language"?: string,"monthly_cap_usd"?: number,"owner_id"?: string,"theme"?: string,"translation_language"?: string
                   }
                   Relationships: [
                     
                   ]
                 },"threads": {
                   Row: {
-                    "action": string,"context_scope": string,"created_at": string,"highlight_id": string,"id": string,"owner_id": string
+                    "action": string,"answer_language": string,"context_scope": string,"created_at": string,"highlight_id": string,"id": string,"owner_id": string,"translation_language": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "action": string,"context_scope": string,"created_at"?: string,"highlight_id": string,"id"?: string,"owner_id"?: string
+                    "action": string,"answer_language": string,"context_scope": string,"created_at"?: string,"highlight_id": string,"id"?: string,"owner_id"?: string,"translation_language": string
                   }
                   Update: {
-                    "action"?: string,"context_scope"?: string,"created_at"?: string,"highlight_id"?: string,"id"?: string,"owner_id"?: string
+                    "action"?: string,"answer_language"?: string,"context_scope"?: string,"created_at"?: string,"highlight_id"?: string,"id"?: string,"owner_id"?: string,"translation_language"?: string
                   }
                   Relationships: [
                     {

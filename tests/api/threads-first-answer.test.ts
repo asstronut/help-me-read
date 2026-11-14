@@ -83,7 +83,7 @@ describe('threads: first answer', () => {
     expect(prompt).toContain('She sat on the bank. The bank was ⟦steep⟧. She sat on the bank.');
     expect(prompt).toContain(PDF_SEGMENTS[0].paragraphs[1]);
     expect(prompt).toContain('IPA');
-    expect(prompt).toContain('Answer in English');
+    expect(prompt).toContain('define the selected term in English');
   });
 
   test('a repeated phrase is located by its prefix', async () => {

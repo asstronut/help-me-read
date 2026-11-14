@@ -5,6 +5,7 @@ import { callCostUsd, costReportingOptions, reportedCostUsdOf } from '@/lib/ai/c
 import { MODELS, PROVIDER_ENV_KEYS } from '@/lib/ai/models';
 import { buildFirstUserMessage, buildSystemPrompt } from '@/lib/ai/prompts';
 import { getLanguageModel } from '@/lib/ai/registry.server';
+import type { Languages } from '@/lib/languages';
 import type { Action } from '@/lib/types';
 
 try {
@@ -15,7 +16,7 @@ try {
 // This script must reach the real providers, never the mock.
 delete process.env.AI_MOCK;
 
-const LANGUAGE = 'English';
+const LANGUAGES: Languages = { translation: 'English', answer: 'English' };
 const META = { title: 'Smoke test', author: null, segmentLabel: 'page 1' };
 
 const CASES: { action: Action; context: string; selection: string }[] = [
@@ -48,7 +49,7 @@ for (const model of models) {
     try {
       const result = await generateText({
         model: getLanguageModel(model.id, { now: new Date(), failAfter: null }),
-        instructions: buildSystemPrompt(action, LANGUAGE),
+        instructions: buildSystemPrompt(action, LANGUAGES),
         prompt: buildFirstUserMessage({ action, selection: { text: selection }, context, meta: META }),
         providerOptions: costReportingOptions(model),
       });

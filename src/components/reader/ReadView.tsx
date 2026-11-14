@@ -7,6 +7,7 @@ import { InlineAlert } from '@/components/ui/InlineAlert';
 import { Toast } from '@/components/ui/Toast';
 import { cn } from '@/components/ui/cn';
 import { CheckIcon } from '@/components/ui/icons';
+import type { BookLanguages } from '@/lib/languages';
 import { currentPdfItem, type ContentsItem } from '@/lib/reader/contents';
 import { e2eHooksEnabled } from '@/lib/test-mode';
 import type {
@@ -22,8 +23,10 @@ import type {
 import { HighlightsPanel } from './HighlightsPanel';
 import { NoteEditor } from './NoteEditor';
 import type { ReaderControls } from './reader-controls';
+import { LanguageOptions } from './ReadingSettings';
 import { BESIDE, useMediaQuery } from './useMediaQuery';
 import { SelectionMenu, type SelectionBox } from './SelectionMenu';
+import { useBookLanguages } from './useBookLanguages';
 
 // pdf.js needs the browser, so the reader is never rendered on the server.
 const PdfReader = dynamic(() => import('./PdfReader'), { ssr: false });
@@ -109,9 +112,11 @@ type Props = {
   threadId: string | null;
   /** Opens the book here instead of at the saved position. */
   at: Anchor | null;
+  /** The book's languages; null when they could not be read. */
+  languages: BookLanguages | null;
 };
 
-export function ReadView({ bookId, threadId, at }: Props) {
+export function ReadView({ bookId, threadId, at, languages: initialLanguages }: Props) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [failed, setFailed] = useState(false);
   const [current, setCurrent] = useState<Current | null>(null);
@@ -124,6 +129,7 @@ export function ReadView({ bookId, threadId, at }: Props) {
   const [listOpen, setListOpen] = useState(false);
   const [pdfContents, setPdfContents] = useState<ContentsItem[]>([]);
   const controls = useRef<ReaderControls | null>(null);
+  const { languages, choose: chooseLanguage, error: languageError } = useBookLanguages(bookId, initialLanguages);
   const panelsBeside = useMediaQuery(BESIDE);
   // Tapping the same overlapping highlights again moves on to the next one.
   const lastTap = useRef<{ ids: string; index: number } | null>(null);
@@ -254,6 +260,7 @@ export function ReadView({ bookId, threadId, at }: Props) {
         <SelectionMenu
           selection={current.selection}
           box={current.box}
+          language={languages?.effective.translation ?? null}
           onPick={onPick}
           onColor={onColor}
         />
@@ -319,6 +326,9 @@ export function ReadView({ bookId, threadId, at }: Props) {
     roomBeside: !sidePanel,
     highlightsOpen: listOpen,
     onHighlights: toggleList,
+    languageOptions: languages && (
+      <LanguageOptions languages={languages} onChoose={chooseLanguage} error={languageError} />
+    ),
     controlsRef: controls,
   };
   if (loaded.format === 'epub') {

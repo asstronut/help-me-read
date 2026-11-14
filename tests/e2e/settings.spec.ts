@@ -1,15 +1,17 @@
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
+import { DEFAULT_SETTINGS as DEFAULTS } from '../helpers/default-settings';
 import { OWNER, adminClient, userId } from '../helpers/users';
 
 test.use({ storageState: 'tests/e2e/.auth/owner.json' });
-
-const DEFAULTS = { explanationLanguage: 'English', actionModels: {}, monthlyCapUsd: 10, theme: 'light' };
 
 // Theme belongs to the shared owner, so each test hands back the light default.
 test.afterEach(async ({ page }) => {
   await page.request.put('/api/settings', { data: DEFAULTS });
 });
+
+const translateInto = (page: Page) => page.getByRole('combobox', { name: 'Translate into' });
+const answerIn = (page: Page) => page.getByRole('combobox', { name: 'Answer in' });
 
 async function addSamplePdf(page: Page): Promise<string> {
   const created = await page.request.post('/api/books', {
@@ -84,15 +86,49 @@ test('a stored model that is no longer available is dropped, so settings still s
   expect(error).toBeNull();
 
   await page.goto('/settings');
-  await page.getByLabel('Explanation language').fill('French');
+  await translateInto(page).selectOption('French');
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByText('Saved')).toBeVisible();
 
   const body = (await (await page.request.get('/api/settings')).json()) as {
-    settings: { explanationLanguage: string; actionModels: object };
+    settings: { translationLanguage: string; actionModels: object };
   };
-  expect(body.settings.explanationLanguage).toBe('French');
+  expect(body.settings.translationLanguage).toBe('French');
   expect(body.settings.actionModels).toEqual({});
+});
+
+test('the Language section has a picker for each language, and both are saved', async ({ page }) => {
+  await page.goto('/settings');
+  await expect(translateInto(page)).toHaveValue('English');
+  await expect(answerIn(page)).toHaveValue('English');
+
+  await translateInto(page).selectOption('Indonesian');
+  await answerIn(page).selectOption('French');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByText('Saved')).toBeVisible();
+
+  await page.reload();
+  await expect(translateInto(page)).toHaveValue('Indonesian');
+  await expect(answerIn(page)).toHaveValue('French');
+});
+
+test('Other… lets you type a language that is not in the list, for either picker', async ({ page }) => {
+  await page.goto('/settings');
+  await expect(page.getByLabel('Language name')).toBeHidden();
+  await translateInto(page).selectOption('Other…');
+  await page.getByRole('textbox', { name: 'Language name for Translate into' }).fill('Javanese');
+  await answerIn(page).selectOption('Other…');
+  await page.getByRole('textbox', { name: 'Language name for Answer in' }).fill('Sundanese');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByText('Saved')).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Language name for Translate into' })).toHaveValue('Javanese');
+  await expect(page.getByRole('textbox', { name: 'Language name for Answer in' })).toHaveValue('Sundanese');
+  const body = (await (await page.request.get('/api/settings')).json()) as {
+    settings: { translationLanguage: string; answerLanguage: string };
+  };
+  expect(body.settings).toMatchObject({ translationLanguage: 'Javanese', answerLanguage: 'Sundanese' });
 });
 
 test('the account section shows the email, and Sign out goes to the login page', async ({ page }) => {

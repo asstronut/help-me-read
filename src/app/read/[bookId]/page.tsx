@@ -1,6 +1,9 @@
+import { connection } from 'next/server';
 import { Suspense } from 'react';
 import { ReadView } from '@/components/reader/ReadView';
 import { AnchorSchema } from '@/lib/selection/schema';
+import { getBookLanguages } from '@/lib/languages.server';
+import { createClient } from '@/lib/supabase/server';
 import type { Anchor } from '@/lib/types';
 
 type PageProps = {
@@ -22,12 +25,16 @@ function parseAnchor(at: string | string[] | undefined): Anchor | null {
 async function Reader({ params, searchParams }: PageProps) {
   const { bookId } = await params;
   const { thread, at } = await searchParams;
+  await connection();
+  // The reader still opens without them: they only label Translate and fill the Language section of Aa.
+  const languages = await getBookLanguages(await createClient(), bookId).catch(() => null);
   // `?thread=<id>` reopens that thread beside the book; `?at=` opens the book at an anchor.
   return (
     <ReadView
       bookId={bookId}
       threadId={typeof thread === 'string' ? thread : null}
       at={parseAnchor(at)}
+      languages={languages}
     />
   );
 }
