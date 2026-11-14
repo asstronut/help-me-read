@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type JSHandle, type Page } from '@playwright/test';
 
 test.use({ storageState: 'tests/e2e/.auth/owner.json' });
 
@@ -297,4 +297,71 @@ test('a PDF that cannot be fetched says so', async ({ page }) => {
   await page.route('**/storage/v1/object/**', (route) => route.fulfill({ status: 500 }));
   await page.goto(`/read/${id}`);
   await expect(page.getByText('Could not open this PDF.')).toBeVisible();
+});
+
+/** Wheels down by `delta` px in 100 px notches and waits for the view to stop moving. */
+async function wheelAndRest(page: Page, scroller: JSHandle<HTMLElement>, delta: number) {
+  const step = Math.sign(delta) * 100;
+  for (let moved = 0; moved < Math.abs(delta); moved += 100) {
+    await page.mouse.wheel(0, step);
+    await page.waitForTimeout(60);
+  }
+  let last = -1;
+  await expect
+    .poll(async () => {
+      const now = await scroller.evaluate((el) => el.scrollTop);
+      const still = now === last;
+      last = now;
+      return still;
+    })
+    .toBe(true);
+}
+
+/** Which slots are drawn: the ones in view must be, and the ones a screen or more away must not be. */
+const drawnSlots = (scroller: JSHandle<HTMLElement>) =>
+  scroller.evaluate((el) => {
+    const view = el.getBoundingClientRect();
+    const current = Number(el.querySelector<HTMLElement>('[aria-current="page"]')!.dataset.slot);
+    const slots = [...el.querySelectorAll<HTMLElement>('[data-slot]')].map((slot) => {
+      const r = slot.getBoundingClientRect();
+      const canvas = slot.querySelector('canvas');
+      return {
+        n: Number(slot.dataset.slot),
+        away: Math.max(view.top - r.bottom, r.top - view.bottom, 0),
+        hasCanvas: canvas !== null,
+        showing: canvas !== null && getComputedStyle(canvas).visibility !== 'hidden',
+      };
+    });
+    const far = slots.filter((s) => s.away > view.height + 20 && Math.abs(s.n - current) > 1);
+    return {
+      visibleButBlank: slots.filter((s) => s.away === 0 && !s.showing).map((s) => s.n),
+      farButDrawn: far.filter((s) => s.hasCanvas).map((s) => s.n),
+      farCount: far.length,
+    };
+  });
+
+test('pages in view are drawn as the view moves, and pages a screen away are not', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop', 'several pages fit on screen only on a wide window');
+  // About 2.3 pages tall at 25%: three show at the top, and the last page is more than a screen away.
+  await page.setViewportSize({ width: 1280, height: 700 });
+  const id = await addSamplePdf(page, CONTENTS_PDF);
+  await page.goto(`/read/${id}`);
+  await expect(currentPage(page).locator('canvas')).toBeVisible();
+  for (let i = 0; i < 8; i++) await page.getByRole('button', { name: 'Zoom out' }).click();
+  await expect(page.getByText('25%', { exact: true })).toBeVisible();
+  const scroller = await scrollerOf(page);
+
+  const atTop = () => expect.poll(() => drawnSlots(scroller).then((d) => d.visibleButBlank)).toEqual([]);
+  await atTop();
+  expect((await drawnSlots(scroller)).farCount).toBeGreaterThan(0);
+  expect((await drawnSlots(scroller)).farButDrawn).toEqual([]);
+
+  const box = (await scroller.asElement()!.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  for (const delta of [300, 800, -1200]) {
+    await wheelAndRest(page, scroller, delta);
+    await expect.poll(() => drawnSlots(scroller).then((d) => d.visibleButBlank)).toEqual([]);
+    await expect.poll(() => drawnSlots(scroller).then((d) => d.farButDrawn)).toEqual([]);
+  }
+  await atTop();
 });

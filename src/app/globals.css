@@ -126,3 +126,16 @@ body {
 .dark [data-pdf-colours='invert'] .react-pdf__Page canvas {
   filter: invert(1) hue-rotate(180deg);
 }
+
+/*
+ * The colour of a PDF page's paper: white, and black where Dark inverts the canvases (the filter
+ * turns white paper black). It belongs to the document, not to the app, so it is the one colour
+ * here outside the theme tokens. A page slot shows it until its page is drawn, so a page that
+ * arrives late appears on paper instead of on the reader's background.
+ */
+:root {
+  --pdf-paper: #fff;
+}
+.dark [data-pdf-colours='invert'] {
+  --pdf-paper: #000;
+}

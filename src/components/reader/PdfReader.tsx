@@ -55,7 +55,7 @@ type Props = {
   onContents: (items: ContentsItem[]) => void;
 };
 
-// Pages this far from the current one are drawn; the rest are sized placeholders.
+// Pages this far from the current one are always drawn: after a jump, `page` is ahead of the observer.
 const RENDER_AROUND = 1;
 
 /** The page taking up the most of the visible area. */
@@ -99,6 +99,8 @@ export default function PdfReader({
   // The first page's real width, in CSS pixels: what 100% means.
   const [realWidth, setRealWidth] = useState(0);
   const [page, setPage] = useState(initialPage);
+  // The pages whose slots are within a screen of the view; the others stay empty slots.
+  const [near, setNear] = useState<ReadonlySet<number>>(() => new Set());
   const [fit, setFit] = usePref(PREFS.pdfFit);
   // A zoom picked with − and +, as a share of the real size; null while the page is fitted.
   const [zoom, setZoom] = useState<number | null>(null);
@@ -231,6 +233,26 @@ export default function PdfReader({
     if (ready) scrollToPage(pageRef.current);
   }, [ready, pageWidth, scrollToPage]);
 
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller || !ready) return;
+    const seen = new Set<number>();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const { target, isIntersecting } of entries) {
+          const n = Number((target as HTMLElement).dataset.slot);
+          if (isIntersecting) seen.add(n);
+          else seen.delete(n);
+        }
+        setNear(new Set(seen));
+      },
+      // A screen's height of margin above and below the view.
+      { root: scroller, rootMargin: '100% 0px' },
+    );
+    for (const slot of scroller.querySelectorAll('[data-slot]')) observer.observe(slot);
+    return () => observer.disconnect();
+  }, [ready, numPages]);
+
   const current = contents && currentPdfItem(contents, page);
   const outline = {
     items: contents,
@@ -299,12 +321,16 @@ export default function PdfReader({
                       key={n}
                       data-slot={n}
                       aria-current={n === page ? 'page' : undefined}
+                      // Paper only while nothing is drawn: a page shaped unlike the first would otherwise look as big as its slot.
+                      className="not-has-[canvas]:bg-(--pdf-paper)"
                       style={{ width: pageWidth, minHeight: pageWidth * aspect }}
                     >
-                      {Math.abs(n - page) <= RENDER_AROUND && (
+                      {(near.has(n) || Math.abs(n - page) <= RENDER_AROUND) && (
                         <Page
                           pageNumber={n}
                           width={pageWidth}
+                          // react-pdf paints the page white inline, which would flash white in Dark.
+                          className="bg-(--pdf-paper)!"
                           loading=""
                           renderAnnotationLayer={false}
                           onRenderSuccess={() => showAtPixelSize(n)}
