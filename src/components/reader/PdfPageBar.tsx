@@ -3,12 +3,16 @@
 import { useState, type ComponentProps } from 'react';
 import { ChevronLeftIcon, ChevronRightIcon, MinusIcon, PlusIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
+import type { PageTurn } from '@/lib/reader/page-keys';
 import type { PdfFit } from '@/lib/reader/reading-prefs';
 
 type Props = {
   page: number;
   numPages: number;
+  /** Goes straight to a page (the one typed in). */
   onPage: (page: number) => void;
+  /** Turns one page back or on. */
+  onTurn: (dir: PageTurn) => void;
   /** The page's size as a share of its real size: 1 is 100%. */
   scale: number;
   /** How the page is fitted; null once − or + has set a zoom of its own. */
@@ -43,6 +47,7 @@ export function PdfPageBar({
   page,
   numPages,
   onPage,
+  onTurn,
   scale,
   fit,
   onZoomIn,
@@ -69,7 +74,7 @@ export function PdfPageBar({
         className,
       )}
     >
-      <BarButton aria-label="Previous page" disabled={page <= 1} onClick={() => onPage(page - 1)}>
+      <BarButton aria-label="Previous page" disabled={page <= 1} onClick={() => onTurn(-1)}>
         <ChevronLeftIcon size={16} />
       </BarButton>
       <span className="flex items-center gap-1.5 tabular-nums">
@@ -84,7 +89,7 @@ export function PdfPageBar({
         />
         <span className="text-muted">of {numPages}</span>
       </span>
-      <BarButton aria-label="Next page" disabled={page >= numPages} onClick={() => onPage(page + 1)}>
+      <BarButton aria-label="Next page" disabled={page >= numPages} onClick={() => onTurn(1)}>
         <ChevronRightIcon size={16} />
       </BarButton>
       <Divider />

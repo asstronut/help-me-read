@@ -365,3 +365,85 @@ test('pages in view are drawn as the view moves, and pages a screen away are not
   }
   await atTop();
 });
+
+/** How far a page's top is from the top of the view, in pixels (a view cannot rest between whole pixels). */
+const pageTopInView = (scroller: JSHandle<HTMLElement>, n: number) =>
+  scroller.evaluate(
+    (el, n) =>
+      Math.abs(el.querySelector(`[data-slot="${n}"]`)!.getBoundingClientRect().top - el.getBoundingClientRect().top),
+    n,
+  );
+const expectPageAtTop = (scroller: JSHandle<HTMLElement>, n: number) =>
+  expect.poll(() => pageTopInView(scroller, n)).toBeLessThan(1);
+
+/** Records the view's scrollTop and the current page on every frame, until `stop`. */
+const watchFrames = (scroller: JSHandle<HTMLElement>) =>
+  scroller.evaluateHandle((el) => {
+    const frames: { top: number; current: number }[] = [];
+    const sample = () => {
+      const top = el.scrollTop;
+      const current = Number(el.querySelector<HTMLElement>('[aria-current="page"]')?.dataset.slot);
+      const last = frames.at(-1);
+      if (!last || last.top !== top || last.current !== current) frames.push({ top, current });
+      frame = requestAnimationFrame(sample);
+    };
+    let frame = requestAnimationFrame(sample);
+    return {
+      stop: () => {
+        cancelAnimationFrame(frame);
+        return frames;
+      },
+    };
+  });
+
+async function openContentsPdf(page: Page) {
+  const id = await addSamplePdf(page, CONTENTS_PDF);
+  await page.goto(`/read/${id}`);
+  await expect(currentPage(page).locator('canvas')).toBeVisible();
+  return scrollerOf(page);
+}
+
+test('Next page glides to the top of the next page, and the page number switches at once', async ({ page }) => {
+  const scroller = await openContentsPdf(page);
+  const frames = await watchFrames(scroller);
+  const target = await scroller.evaluate((el) => el.querySelector<HTMLElement>('[data-slot="2"]')!.offsetTop);
+
+  await page.getByRole('button', { name: 'Next page' }).click();
+  await expect(pageInput(page)).toHaveValue('2');
+  await expectPageAtTop(scroller, 2);
+  const seen = await frames.evaluate((f) => f.stop());
+
+  // On the way: a view that is part of the way there, with the page already named, and no step back.
+  expect(seen.some((f) => f.top > 0 && f.top < target && f.current === 2)).toBe(true);
+  const pages = seen.map((f) => f.current);
+  expect(pages).toEqual([...pages].sort((a, b) => a - b));
+});
+
+test('three quick presses of the right arrow land three pages on', async ({ page }) => {
+  const scroller = await openContentsPdf(page);
+  const frames = await watchFrames(scroller);
+  const target = await scroller.evaluate((el) => el.querySelector<HTMLElement>('[data-slot="4"]')!.offsetTop);
+  for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight');
+  await expect(pageInput(page)).toHaveValue('4');
+  await expectPageAtTop(scroller, 4);
+  await page.waitForTimeout(400);
+  expect(await pageTopInView(scroller, 4)).toBeLessThan(1);
+  const seen = await frames.evaluate((f) => f.stop());
+  const pages = seen.map((f) => f.current);
+  expect(pages).toEqual([...pages].sort((a, b) => a - b));
+  expect(pages.at(-1)).toBe(4);
+  expect(seen.some((f) => f.top > 0 && f.top < target)).toBe(true);
+});
+
+test('with reduced motion a turn cuts straight to the page', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const scroller = await openContentsPdf(page);
+  const frames = await watchFrames(scroller);
+  const target = await scroller.evaluate((el) => el.querySelector<HTMLElement>('[data-slot="2"]')!.offsetTop);
+
+  await page.getByRole('button', { name: 'Next page' }).click();
+  await expectPageAtTop(scroller, 2);
+  await page.waitForTimeout(300);
+  const tops = (await frames.evaluate((f) => f.stop())).map((f) => f.top);
+  expect(tops).toEqual([0, target]);
+});

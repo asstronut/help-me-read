@@ -12,7 +12,7 @@ import {
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { currentPdfItem, pdfContents, type ContentsItem } from '@/lib/reader/contents';
-import { listenForPageKeys } from '@/lib/reader/page-keys';
+import { listenForPageKeys, type PageTurn } from '@/lib/reader/page-keys';
 import { CSS_PX_PER_POINT, zoomStep } from '@/lib/reader/pdf-zoom';
 import { PREFS, usePref, type PdfFit } from '@/lib/reader/reading-prefs';
 import { capturePdfSelection } from '@/lib/selection/capture-pdf';
@@ -27,6 +27,7 @@ import { ProgressFooter } from './ProgressFooter';
 import { ReaderTopBar } from './ReaderTopBar';
 import { PdfOptions, ReadingSettings } from './ReadingSettings';
 import type { SelectionBox } from './SelectionMenu';
+import { usePdfMotion } from './usePdfMotion';
 import { usePositionSaver } from './usePositionSaver';
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -150,25 +151,46 @@ export default function PdfReader({
     [bookId],
   );
 
+  /** Makes the page the one that takes up the most of the view. */
+  function followView() {
+    const el = scrollRef.current;
+    const visible = el && mostVisiblePage(el);
+    if (visible) setPage(visible);
+  }
+  const motion = usePdfMotion({ scrollRef, onGlideLost: followView });
+
   const scrollToPage = useCallback((target: number) => {
     scrollRef.current?.querySelector(`[data-slot="${target}"]`)?.scrollIntoView({ block: 'start' });
   }, []);
 
+  const clampPage = (n: number) => Math.min(Math.max(n, 1), Math.max(numPages, 1));
+
   /** Goes to the page; with `y` (0 to 1 down the page), scrolls that point a third of the way down the view. */
   function goTo(target: number, y?: number) {
-    const next = Math.min(Math.max(target, 1), Math.max(numPages, 1));
+    const next = clampPage(target);
+    pageRef.current = next;
     setPage(next);
     const scroller = scrollRef.current;
     const slot = scroller?.querySelector<HTMLElement>(`[data-slot="${next}"]`);
     if (y === undefined || !scroller || !slot) scrollToPage(next);
     else scroller.scrollTop = slot.offsetTop + y * slot.offsetHeight - scroller.clientHeight / 3;
   }
+  /** Turns one page, gliding there. The page number goes first, so a press during the glide starts from the new page. */
+  function turn(dir: PageTurn) {
+    const next = clampPage(pageRef.current + dir);
+    if (next === pageRef.current) return;
+    pageRef.current = next;
+    setPage(next);
+    motion.glideTo(next);
+  }
   const goToRef = useRef(goTo);
+  const turnRef = useRef(turn);
   useEffect(() => {
     goToRef.current = goTo;
+    turnRef.current = turn;
   });
 
-  useEffect(() => listenForPageKeys(window, (dir) => goToRef.current(pageRef.current + dir)), []);
+  useEffect(() => listenForPageKeys(window, (dir) => turnRef.current(dir)), []);
 
   useEffect(() => {
     controlsRef.current = {
@@ -209,9 +231,8 @@ export default function PdfReader({
   }
 
   function onScroll() {
-    const el = scrollRef.current;
-    const visible = el && mostVisiblePage(el);
-    if (visible) setPage(visible);
+    // A glide has named its page already; the view only passes through the pages on the way.
+    if (motion.scrolled() !== 'glide') followView();
   }
 
   // Whole page: one page fills the column's height exactly, so no other page shows beside it.
@@ -348,6 +369,7 @@ export default function PdfReader({
             page={page}
             numPages={numPages}
             onPage={goTo}
+            onTurn={turn}
             scale={scale}
             fit={zoom === null ? fit : null}
             onZoomIn={zoomIn === null ? undefined : () => setZoom(zoomIn)}
