@@ -231,8 +231,9 @@ function ShelfBook({
   );
 }
 
-/** The book read last: its cover, how far through it the reader is, and a way back in. */
+/** The book read last: its cover, where the reader is in it, and a way back in. */
 function ContinueReading({ book }: { book: BookItem }) {
+  const where = [book.author, book.chapter].filter(Boolean).join(' · ');
   const percent = book.progress === null ? null : Math.round(Math.min(Math.max(book.progress, 0), 1) * 100);
   return (
     <section aria-labelledby="continue" className="flex flex-wrap items-center gap-5 sm:gap-8">
@@ -242,7 +243,7 @@ function ContinueReading({ book }: { book: BookItem }) {
           Continue reading
         </h2>
         <p className="font-serif text-[28px] leading-tight break-words sm:text-4xl">{book.title}</p>
-        {book.author && <p className="text-[15px] text-muted">{book.author}</p>}
+        {where && <p className="text-[15px] break-words text-muted">{where}</p>}
         {percent !== null && (
           <div className="flex max-w-[360px] items-center gap-3">
             <div

@@ -1,7 +1,7 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { MAX_UPLOAD_BYTES } from '../../src/lib/types';
 
 test.use({ storageState: 'tests/e2e/.auth/owner.json' });
@@ -219,8 +219,62 @@ test('the reading progress saved in the reader shows in the library', async ({ p
     'aria-valuenow',
     shown!,
   );
+  // A PDF without bookmarks has no chapter to add to the author.
+  await expect(continuing.locator('p', { hasText: /^Test Author$/ })).toBeVisible();
   await continuing.getByRole('link', { name: 'Continue' }).click();
   await expect(page.getByLabel('Page number')).toHaveValue('2');
+});
+
+/** A book stored from a fixture with contents (see tests/fixtures/make-fixtures.ts), without the library UI. */
+async function addContentsBook(page: Page, fixture: 'contents.pdf' | 'contents.epub', author: string | null) {
+  const format = fixture.endsWith('.pdf') ? 'pdf' : 'epub';
+  const created = await page.request.post('/api/books', {
+    data: { title: 'Contents Book', author, format, sizeBytes: 100 },
+  });
+  const { bookId, signedUploadUrl } = (await created.json()) as { bookId: string; signedUploadUrl: string };
+  const put = await fetch(signedUploadUrl, {
+    method: 'PUT',
+    headers: { 'content-type': format === 'pdf' ? 'application/pdf' : 'application/epub+zip' },
+    body: readFileSync(`tests/fixtures/${fixture}`),
+  });
+  expect(put.ok).toBe(true);
+  return bookId;
+}
+
+/** Opens the book, goes to Chapter 3 through the contents (inside `volume`), and waits for it to be saved. */
+async function readChapterThree(page: Page, bookId: string, volume: string) {
+  await page.goto(`/read/${bookId}`);
+  const button = page.getByRole('button', { name: 'Contents' });
+  await expect(button).toBeVisible();
+  if ((await button.getAttribute('aria-expanded')) !== 'true') await button.click();
+  const contents = page.getByRole('navigation', { name: 'Contents' });
+  await contents.getByRole('button', { name: volume, exact: true }).click();
+  const saved = page.waitForResponse(
+    (r) =>
+      r.request().method() === 'PUT' &&
+      r.url().endsWith(`/api/books/${bookId}/position`) &&
+      r.request().postDataJSON().chapter === 'Chapter 3',
+  );
+  await contents.getByRole('button', { name: 'Chapter 3' }).click();
+  expect((await saved).status()).toBe(204);
+}
+
+test('a PDF read to a chapter shows "Author · Chapter" on the Continue reading card', async ({ page }) => {
+  const bookId = await addContentsBook(page, 'contents.pdf', 'Test Author');
+  await readChapterThree(page, bookId, 'Part Two');
+
+  await page.goto('/library');
+  const continuing = page.getByRole('region', { name: 'Continue reading' });
+  await expect(continuing.getByText('Test Author · Chapter 3')).toBeVisible();
+});
+
+test('an EPUB read to a chapter shows the chapter alone when the book has no author', async ({ page }) => {
+  const bookId = await addContentsBook(page, 'contents.epub', null);
+  await readChapterThree(page, bookId, 'Volume II');
+
+  await page.goto('/library');
+  const continuing = page.getByRole('region', { name: 'Continue reading' });
+  await expect(continuing.getByText('Chapter 3', { exact: true })).toBeVisible();
 });
 
 test('the ⋯ menu closes with Escape and gives focus back', async ({ page }) => {

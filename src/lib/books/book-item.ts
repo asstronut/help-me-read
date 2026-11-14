@@ -12,13 +12,18 @@ export type BookItem = {
   lastOpenedAt: string | null;
   /** How far through the book the reader is, 0 to 1; null until it is first read. */
   progress: number | null;
+  /** The chapter the reader was in when they last left the book; null when unknown. */
+  chapter: string | null;
 };
 
 export const BOOK_COLUMNS =
-  'id, title, author, format, storage_path, segment_count, extracted_at, last_opened_at, progress';
+  'id, title, author, format, storage_path, segment_count, extracted_at, last_opened_at, progress, chapter_label';
 
 export function toBookItem(
-  row: Pick<BookRow, 'id' | 'title' | 'author' | 'format' | 'extracted_at' | 'last_opened_at' | 'progress'>,
+  row: Pick<
+    BookRow,
+    'id' | 'title' | 'author' | 'format' | 'extracted_at' | 'last_opened_at' | 'progress' | 'chapter_label'
+  >,
 ): BookItem {
   return {
     id: row.id,
@@ -28,5 +33,6 @@ export function toBookItem(
     extracted: row.extracted_at !== null,
     lastOpenedAt: row.last_opened_at,
     progress: row.progress,
+    chapter: row.chapter_label,
   };
 }

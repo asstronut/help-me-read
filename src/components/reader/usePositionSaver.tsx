@@ -6,8 +6,12 @@ import type { ReadingLocation } from '@/lib/types';
 
 const SAVE_TIMEOUT_MS = 10_000;
 
-/** Where the reader is, and how far through the book that is (0 to 1), when the reader knows. */
-type PositionUpdate = { location: ReadingLocation; progress: number | null };
+/**
+ * Where the reader is, how far through the book that is (0 to 1) when the reader knows, and the
+ * chapter it is in. A chapter of undefined means the book's contents are not loaded yet, so the
+ * stored chapter is kept; null means they are loaded and nothing covers this place.
+ */
+type PositionUpdate = { location: ReadingLocation; progress: number | null; chapter?: string | null };
 
 /** Saves the reading position of a book; `status` is a line to show when saving is not working. */
 export function usePositionSaver(bookId: string) {
@@ -16,13 +20,14 @@ export function usePositionSaver(bookId: string) {
 
   useEffect(() => {
     const saver = createPositionSaver<PositionUpdate>(
-      async ({ location, progress }) => {
+      async ({ location, progress, chapter }) => {
         const res = await fetch(`/api/books/${bookId}/position`, {
           method: 'PUT',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
             ...location,
             progress: progress === null ? undefined : Math.min(Math.max(progress, 0), 1),
+            chapter, // undefined is omitted, which tells the server to keep the stored one
           }),
           keepalive: true,
           signal: AbortSignal.timeout(SAVE_TIMEOUT_MS),
@@ -52,7 +57,8 @@ export function usePositionSaver(bookId: string) {
     );
 
   const save = useCallback(
-    (location: ReadingLocation, progress: number | null) => saverRef.current?.update({ location, progress }),
+    (location: ReadingLocation, progress: number | null, chapter: string | null | undefined) =>
+      saverRef.current?.update({ location, progress, chapter }),
     [],
   );
   return { save, status };
