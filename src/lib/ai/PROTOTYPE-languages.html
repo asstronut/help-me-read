@@ -1,0 +1,311 @@
+<!doctype html>
+<!-- PROTOTYPE for issue #27: throwaway. Open by double-click. Not production code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Language Model Prototype</title>
+<style>
+  :root { --bg:#fbfaf7; --fg:#1d1c1a; --muted:#6b6862; --line:#e4e1da; --card:#fff; --accent:#2f5d8a; --accent-bg:#e9f0f7; --bad:#a23b2a; --bad-bg:#fbeae6; --new:#fff6d6; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#181816; --fg:#ecebe7; --muted:#9b978f; --line:#33322e; --card:#22211e; --accent:#8fb6dd; --accent-bg:#233140; --bad:#f08a76; --bad-bg:#3a2320; --new:#3a3418; } }
+  * { box-sizing:border-box }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; }
+  main { max-width:1100px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:22px; margin:0 0 4px } h2 { font-size:15px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:28px 0 10px }
+  h3 { font-size:15px; margin:0 0 6px }
+  p { margin:0 0 8px } .muted { color:var(--muted) } code { font-size:13px }
+  .question { background:var(--card); border:1px solid var(--line); border-left:3px solid var(--accent); padding:12px 14px; border-radius:6px; margin-top:12px }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:12px }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px 14px; min-width:0 }
+  .row { display:flex; justify-content:space-between; gap:12px; padding:3px 0; border-bottom:1px dashed var(--line) } .row:last-child{border:0}
+  .row b { font-weight:600 } .src { color:var(--muted); font-size:12px }
+  .changed { background:var(--new); border-radius:4px }
+  button { font:inherit; padding:6px 12px; border-radius:6px; border:1px solid var(--line); background:var(--card); color:var(--fg); cursor:pointer }
+  button.primary { background:var(--accent); border-color:var(--accent); color:var(--bg) }
+  button:disabled { opacity:.45; cursor:default }
+  select, input { font:inherit; padding:5px 8px; border-radius:6px; border:1px solid var(--line); background:var(--card); color:var(--fg); max-width:100% }
+  .controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:8px }
+  .controls label { color:var(--muted); font-size:13px }
+  .tabs { display:flex; flex-wrap:wrap; gap:4px; border-bottom:1px solid var(--line) }
+  .tabs button { border:0; border-bottom:2px solid transparent; border-radius:0; background:none; color:var(--muted) }
+  .tabs button.on { color:var(--fg); border-bottom-color:var(--accent) }
+  .steps { list-style:none; padding:0; margin:10px 0 0; display:grid; gap:6px }
+  .steps li { display:flex; gap:10px; align-items:center } .steps .n { width:22px; color:var(--muted); text-align:right }
+  .steps li.done button { text-decoration:line-through }
+  .log { font-size:13px; padding:8px 10px; border-radius:6px; background:var(--accent-bg); margin-top:10px }
+  .log.bad { background:var(--bad-bg); color:var(--bad) }
+  .msg { font-size:13px; padding:6px 8px; border-radius:6px; border:1px solid var(--line); margin-top:6px }
+  .msg .who { font-weight:600 } .reply { color:var(--accent) }
+  pre { white-space:pre-wrap; font-size:12px; background:var(--bg); border:1px solid var(--line); padding:8px; border-radius:6px; margin:6px 0 0 }
+  details summary { cursor:pointer; color:var(--muted); font-size:13px; margin-top:6px }
+</style>
+</head>
+<body>
+<main>
+<h1>Translation language vs. Answer language</h1>
+<p class="muted">Prototype for issue #27: throwaway, in-memory, nothing is saved.</p>
+<div class="question">
+  <b>The question:</b> Does the proposed model hold up when you push it through real cases? The model is two Default languages in Settings, an optional per-Book override for each, Threads that keep the languages they started with, typed questions answered in their own language, and Vocab meanings written in the Translation language. Watch for a moment where a language comes out that you didn't expect.
+</div>
+
+<h2>Guided walkthroughs</h2>
+<div class="card">
+  <div class="tabs" id="tabs"></div>
+  <div id="scenario"></div>
+</div>
+
+<h2>Current state</h2>
+<div id="last" class="log">Ready.</div>
+<div class="grid" id="state" style="margin-top:12px"></div>
+
+<h2>Free play</h2>
+<div class="card" id="free"></div>
+</main>
+
+<script>
+// ───────────── Pure logic module (liftable; no DOM in here) ─────────────
+const Lang = (() => {
+  const LANGUAGE_FIELDS = { translation: 'Translate into', answer: 'Answer in' };
+
+  function validateLanguage(field, value) {
+    const v = (value ?? '').trim();
+    if (v.length < 1) return `${LANGUAGE_FIELDS[field]}: enter a language`;
+    if (v.length > 40) return `${LANGUAGE_FIELDS[field]}: use at most 40 characters`;
+    return null;
+  }
+
+  /** Migration: an existing reader's single explanation language becomes both defaults. */
+  function migrateLegacy(explanationLanguage) {
+    const v = explanationLanguage ?? 'English';
+    return { translation: v, answer: v };
+  }
+
+  /** The one rule: override, else the current default. */
+  function resolveLanguages(defaults, book) {
+    return {
+      translation: book?.overrides.translation ?? defaults.translation,
+      answer: book?.overrides.answer ?? defaults.answer,
+    };
+  }
+
+  function buildSystemPrompt(action, { translation, answer }) {
+    const instr = {
+      translate: `Translate the selected text naturally into ${translation}. Add one line of notes, in ${answer}, only if a phrase has no direct equivalent.`,
+      define: 'Define the selected term (term, part of speech, IPA, meaning in context, one example).',
+      explain: 'Explain what the selected passage means and why it matters in context, in one short paragraph.',
+      simplify: `Rewrite the selected text in plain, easy ${answer} at about the same length.`,
+      ask: "Answer the reader's question about the selected text, using the context given.",
+    }[action];
+    return [
+      `You help a reader understand a book. Answer in ${answer}. Be brief; the reader can ask follow-ups.`,
+      `If the reader types a question, reply in the language that question is written in; otherwise use ${answer}.`,
+      instr,
+    ].join('\n\n');
+  }
+
+  /** What the reply should be in. The app doesn't detect this; the model follows the prompt. */
+  function expectedReplyLanguage(thread, typedIn) {
+    return typedIn ?? thread.languages.answer;
+  }
+
+  function vocabMeaningLanguage(defaults, book) {
+    return resolveLanguages(defaults, book).translation;
+  }
+
+  const initial = () => ({
+    defaults: { translation: 'English', answer: 'English' },
+    books: {
+      novel: { id: 'novel', title: 'Norwegian Wood (Japanese)', overrides: { translation: null, answer: null } },
+      essay: { id: 'essay', title: 'An English essay collection', overrides: { translation: null, answer: null } },
+    },
+    threads: [],
+    vocab: [],
+    error: null,
+  });
+
+  function reduce(state, a) {
+    const s = structuredClone(state); s.error = null;
+    switch (a.type) {
+      case 'migrate': { s.defaults = migrateLegacy(a.legacy); return s; }
+      case 'setDefault': {
+        const err = validateLanguage(a.field, a.value); if (err) { s.error = err; return s; }
+        s.defaults[a.field] = a.value.trim(); return s;
+      }
+      case 'setOverride': {
+        if (a.value === null) { s.books[a.bookId].overrides[a.field] = null; return s; }
+        const err = validateLanguage(a.field, a.value); if (err) { s.error = err; return s; }
+        s.books[a.bookId].overrides[a.field] = a.value.trim(); return s;
+      }
+      case 'startThread': {
+        const book = s.books[a.bookId];
+        const languages = resolveLanguages(s.defaults, book); // snapshot, never re-resolved
+        const t = { id: s.threads.length + 1, bookId: a.bookId, action: a.action, languages,
+                    systemPrompt: buildSystemPrompt(a.action, languages), messages: [] };
+        const first = a.action === 'ask' ? { text: a.text, typedIn: a.typedIn } : { text: `(${a.action} selection)`, typedIn: null };
+        t.messages.push({ ...first, reply: firstReply(t, first.typedIn) });
+        s.threads.push(t); return s;
+      }
+      case 'followUp': {
+        const t = s.threads.find((x) => x.id === a.threadId);
+        t.messages.push({ text: a.text, typedIn: a.typedIn, reply: `Reply in ${expectedReplyLanguage(t, a.typedIn)}` });
+        return s;
+      }
+      case 'saveVocab': {
+        const book = a.bookId ? s.books[a.bookId] : null;
+        s.vocab.push({ term: a.term, book: book?.title ?? '(no book)', meaningIn: vocabMeaningLanguage(s.defaults, book) });
+        return s;
+      }
+    }
+    return s;
+  }
+
+  function firstReply(t, typedIn) {
+    if (t.action === 'translate') return `Translation in ${t.languages.translation}; note (if any) in ${t.languages.answer}`;
+    return `Reply in ${expectedReplyLanguage(t, typedIn)}`;
+  }
+
+  return { initial, reduce, resolveLanguages, buildSystemPrompt, validateLanguage };
+})();
+
+// ───────────── Throwaway page shell ─────────────
+const COMMON = ['English', 'Indonesian', 'Japanese', 'Spanish', 'French', 'German', 'Chinese (Simplified)'];
+let state = Lang.initial(), prev = state;
+
+function dispatch(action, label) {
+  prev = state; state = Lang.reduce(state, action);
+  const el = document.getElementById('last');
+  el.className = 'log' + (state.error ? ' bad' : '');
+  el.textContent = state.error ? `Rejected: ${state.error}` : `Did: ${label}`;
+  render();
+}
+const esc = (x) => String(x).replace(/[&<>"]/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+const ch = (a, b) => (JSON.stringify(a) !== JSON.stringify(b) ? ' changed' : '');
+
+function render() {
+  const d = state.defaults, pd = prev.defaults;
+  let html = `<div class="card"><h3>Settings: Default languages</h3>
+    <div class="row${ch(d.translation, pd.translation)}"><span>Translate into</span><b>${esc(d.translation)}</b></div>
+    <div class="row${ch(d.answer, pd.answer)}"><span>Answer in</span><b>${esc(d.answer)}</b></div></div>`;
+  for (const b of Object.values(state.books)) {
+    const eff = Lang.resolveLanguages(d, b), peff = Lang.resolveLanguages(pd, prev.books[b.id]);
+    const src = (f) => (b.overrides[f] ? 'Book override' : `Default (${esc(d[f])})`);
+    html += `<div class="card"><h3>${esc(b.title)}</h3>
+      <div class="row${ch(eff.translation, peff.translation)}"><span>Translate into <span class="src">· ${src('translation')}</span></span><b>${esc(eff.translation)}</b></div>
+      <div class="row${ch(eff.answer, peff.answer)}"><span>Answer in <span class="src">· ${src('answer')}</span></span><b>${esc(eff.answer)}</b></div>
+      <p class="muted" style="margin-top:6px;font-size:13px">Selection menu button: <b>“Translate to ${esc(eff.translation)}”</b></p></div>`;
+  }
+  html += `<div class="card"><h3>Threads</h3>${state.threads.length ? '' : '<p class="muted">None yet.</p>'}`;
+  state.threads.forEach((t, i) => {
+    const isNew = i >= prev.threads.length || t.messages.length !== prev.threads[i]?.messages.length;
+    html += `<div class="msg${isNew ? ' changed' : ''}"><b>#${t.id} ${t.action}</b> on ${esc(state.books[t.bookId].title)}<br>
+      <span class="src">Kept languages: translate into ${esc(t.languages.translation)}, answer in ${esc(t.languages.answer)}</span>
+      ${t.messages.map((m) => `<div class="msg"><span class="who">Reader:</span> ${esc(m.text)}${m.typedIn ? ` <span class="src">(typed in ${esc(m.typedIn)})</span>` : ''}<br><span class="reply">→ ${esc(m.reply)}</span></div>`).join('')}
+      <details><summary>System prompt sent to the model</summary><pre>${esc(t.systemPrompt)}</pre></details></div>`;
+  });
+  html += `</div><div class="card"><h3>Vocab entries</h3>${state.vocab.length ? '' : '<p class="muted">None yet.</p>'}`;
+  state.vocab.forEach((v, i) => { html += `<div class="row${i >= prev.vocab.length ? ' changed' : ''}"><span>${esc(v.term)} <span class="src">· ${esc(v.book)}</span></span><b>meaning in ${esc(v.meaningIn)}</b></div>`; });
+  html += '</div>';
+  document.getElementById('state').innerHTML = html;
+  renderFree();
+}
+
+// Free play
+function langPicker(id, withDefault, defaultLabel) {
+  return `<select id="${id}" onchange="document.getElementById('${id}-other').style.display=this.value==='__other'?'':'none'">
+    ${withDefault ? `<option value="__default">Default (${esc(defaultLabel)})</option>` : ''}
+    ${COMMON.map((l) => `<option>${l}</option>`).join('')}<option value="__other">Other…</option></select>
+    <input id="${id}-other" placeholder="Any language" style="display:none;width:140px">`;
+}
+function pick(id) { const v = document.getElementById(id).value; return v === '__other' ? document.getElementById(id + '-other').value : v; }
+const bookOpts = () => Object.values(state.books).map((b) => `<option value="${b.id}">${esc(b.title)}</option>`).join('');
+
+function renderFree() {
+  const threads = state.threads.map((t) => `<option value="${t.id}">#${t.id} ${t.action}</option>`).join('');
+  document.getElementById('free').innerHTML = `
+    <div class="controls"><label>Settings</label>
+      <select id="f-field"><option value="translation">Translate into</option><option value="answer">Answer in</option></select>
+      ${langPicker('f-def', false)} <button onclick="freeSetDefault()">Save default</button></div>
+    <div class="controls"><label>Aa menu</label><select id="f-book">${bookOpts()}</select>
+      <select id="f-ofield"><option value="translation">Translate into</option><option value="answer">Answer in</option></select>
+      ${langPicker('f-ov', true, '…')} <button onclick="freeOverride()">Apply to this book</button></div>
+    <div class="controls"><label>Select text</label><select id="f-tbook">${bookOpts()}</select>
+      <select id="f-action"><option>translate</option><option>define</option><option>explain</option><option>simplify</option><option>ask</option></select>
+      <label>if Ask, typed in</label><select id="f-typed"><option>English</option><option>Indonesian</option><option>Japanese</option></select>
+      <button onclick="freeStart()">Start thread</button></div>
+    <div class="controls"><label>Follow-up</label><select id="f-thread" ${threads ? '' : 'disabled'}>${threads}</select>
+      <label>typed in</label><select id="f-ftyped"><option>English</option><option>Indonesian</option><option>Japanese</option></select>
+      <button onclick="freeFollow()" ${threads ? '' : 'disabled'}>Send follow-up</button></div>
+    <div class="controls"><label>Vocab</label><select id="f-vbook">${bookOpts()}<option value="">(no book)</option></select>
+      <button onclick="freeVocab()">Save a word</button></div>
+    <div class="controls"><button onclick="state=prev=Lang.initial();dispatch({type:'noop'},'reset')">Reset everything</button></div>`;
+}
+function freeSetDefault() { const f = document.getElementById('f-field').value, v = pick('f-def'); dispatch({ type:'setDefault', field:f, value:v }, `Settings › ${f === 'translation' ? 'Translate into' : 'Answer in'} = ${v}`); }
+function freeOverride() { const b = document.getElementById('f-book').value, f = document.getElementById('f-ofield').value, raw = pick('f-ov'); const v = raw === '__default' ? null : raw;
+  dispatch({ type:'setOverride', bookId:b, field:f, value:v }, `Aa menu on ${state.books[b].title} › ${f} = ${v ?? 'Default'}`); }
+function freeStart() { const b = document.getElementById('f-tbook').value, a = document.getElementById('f-action').value, typed = document.getElementById('f-typed').value;
+  dispatch({ type:'startThread', bookId:b, action:a, text:'Why does she say that?', typedIn: a === 'ask' ? typed : null }, `Started ${a} on ${state.books[b].title}`); }
+function freeFollow() { const t = +document.getElementById('f-thread').value, typed = document.getElementById('f-ftyped').value;
+  dispatch({ type:'followUp', threadId:t, text:'…a follow-up…', typedIn:typed }, `Follow-up in ${typed} on thread #${t}`); }
+let wordN = 0;
+function freeVocab() { const b = document.getElementById('f-vbook').value || null; dispatch({ type:'saveVocab', bookId:b, term:`word ${++wordN}` }, 'Saved a vocab entry'); }
+
+// Guided walkthroughs
+const SCENARIOS = [
+  { name: 'Happy path', text: 'A reader wants English explanations but Indonesian translations. Watch the Translate thread: the translation is Indonesian, its note is English, and a follow-up stays English.',
+    steps: [
+      ['Settings › Translate into = Indonesian', { type:'setDefault', field:'translation', value:'Indonesian' }],
+      ['Translate a sentence in the essay', { type:'startThread', bookId:'essay', action:'translate' }],
+      ['Ask “why that word?” in English', { type:'followUp', threadId:1, text:'Why that word?', typedIn:'English' }],
+      ['Explain a passage', { type:'startThread', bookId:'essay', action:'explain' }],
+    ] },
+  { name: 'Book override vs. default', text: 'The novel gets its own Answer language. The essay has no override, so it should follow the default, even after the default changes. Then set the novel back to Default.',
+    steps: [
+      ['Aa menu on the novel › Answer in = Japanese', { type:'setOverride', bookId:'novel', field:'answer', value:'Japanese' }],
+      ['Settings › Answer in = Spanish', { type:'setDefault', field:'answer', value:'Spanish' }],
+      ['Aa menu on the novel › Answer in = Default', { type:'setOverride', bookId:'novel', field:'answer', value:null }],
+    ] },
+  { name: 'Thread keeps its languages', text: 'Start a thread, then change the language. The old thread’s follow-up should keep its original language; a new thread picks up the change.',
+    steps: [
+      ['Define a word in the novel', { type:'startThread', bookId:'novel', action:'define' }],
+      ['Settings › Answer in = Indonesian', { type:'setDefault', field:'answer', value:'Indonesian' }],
+      ['Follow-up on the old thread whose language the model can’t tell (just “?”)', { type:'followUp', threadId:1, text:'?', typedIn:null }],
+      ['Define another word in the novel', { type:'startThread', bookId:'novel', action:'define' }],
+    ] },
+  { name: 'Typed language wins', text: 'Answer language is English. Ask in Indonesian → Indonesian reply. Follow up in English → back to English. Note: the app doesn’t detect the language, it only tells the model to do this.',
+    steps: [
+      ['Ask a question typed in Indonesian', { type:'startThread', bookId:'essay', action:'ask', text:'Kenapa dia bilang begitu?', typedIn:'Indonesian' }],
+      ['Follow up in English', { type:'followUp', threadId:1, text:'And the next line?', typedIn:'English' }],
+      ['Follow up in Japanese', { type:'followUp', threadId:1, text:'次の文は？', typedIn:'Japanese' }],
+    ] },
+  { name: 'Vocab meanings', text: 'Meanings use the Book’s Translation language when saved and never change afterwards. A word with no Book uses the default.',
+    steps: [
+      ['Save a word from the novel', { type:'saveVocab', bookId:'novel', term:'sabishii' }],
+      ['Aa menu on the novel › Translate into = Indonesian', { type:'setOverride', bookId:'novel', field:'translation', value:'Indonesian' }],
+      ['Save another word from the novel', { type:'saveVocab', bookId:'novel', term:'natsukashii' }],
+      ['Save a word with no Book', { type:'saveVocab', bookId:null, term:'serendipity' }],
+    ] },
+  { name: 'Existing reader migrates', text: 'An existing reader had one “Explanation language” = Indonesian. After the migration, both defaults are Indonesian, so nothing changes until they pick something new.',
+    steps: [
+      ['Run the migration (old setting: Indonesian)', { type:'migrate', legacy:'Indonesian' }],
+      ['Translate in the essay', { type:'startThread', bookId:'essay', action:'translate' }],
+    ] },
+  { name: 'Should be rejected', text: 'Empty or over-40-character names must be refused with an error that names the field.',
+    steps: [
+      ['Settings › Translate into = (empty)', { type:'setDefault', field:'translation', value:'  ' }],
+      ['Aa menu › Answer in = a 41-character name', { type:'setOverride', bookId:'novel', field:'answer', value:'x'.repeat(41) }],
+    ] },
+];
+let tab = 0, stepAt = 0;
+function renderTabs() {
+  document.getElementById('tabs').innerHTML = SCENARIOS.map((s, i) => `<button class="${i === tab ? 'on' : ''}" onclick="startScenario(${i})">${s.name}</button>`).join('');
+  const s = SCENARIOS[tab];
+  document.getElementById('scenario').innerHTML = `<p style="margin-top:12px">${s.text}</p><ol class="steps">${s.steps.map(([label], i) =>
+    `<li class="${i < stepAt ? 'done' : ''}"><span class="n">${i + 1}.</span><button class="${i === stepAt ? 'primary' : ''}" ${i === stepAt ? '' : 'disabled'} onclick="runStep(${i})">${esc(label)}</button></li>`).join('')}</ol>
+    ${stepAt >= s.steps.length ? '<p class="muted" style="margin-top:8px">Done. Pick this tab again to replay it.</p>' : ''}`;
+}
+function startScenario(i) { tab = i; stepAt = 0; state = prev = Lang.initial(); document.getElementById('last').className = 'log'; document.getElementById('last').textContent = `Reset for “${SCENARIOS[i].name}”.`; render(); renderTabs(); }
+function runStep(i) { const [label, action] = SCENARIOS[tab].steps[i]; stepAt = i + 1; dispatch(action, label); renderTabs(); }
+startScenario(0);
+</script>
+</body>
+</html>
