@@ -273,6 +273,8 @@ export default function PdfReader({
             )}
             <Document
               file={fileUrl}
+              // Without this a page that is loading suspends the whole reader, and React hides it.
+              suspense={false}
               loading={<p className="p-4 text-sm opacity-70">Loading…</p>}
               error=""
               onLoadSuccess={(doc) => {
@@ -303,6 +305,7 @@ export default function PdfReader({
                         <Page
                           pageNumber={n}
                           width={pageWidth}
+                          loading=""
                           renderAnnotationLayer={false}
                           onRenderSuccess={() => showAtPixelSize(n)}
                         >

@@ -4,9 +4,11 @@ import { expect, test, type Page } from '@playwright/test';
 test.use({ storageState: 'tests/e2e/.auth/owner.json' });
 
 const SAMPLE_PDF = 'tests/fixtures/sample.pdf';
+// Six pages, so a scroll can cross several page boundaries.
+const CONTENTS_PDF = 'tests/fixtures/contents.pdf';
 
-/** Creates a book with the sample PDF stored, without going through the library UI. */
-async function addSamplePdf(page: Page): Promise<string> {
+/** Creates a book with a PDF stored (the sample by default), without going through the library UI. */
+async function addSamplePdf(page: Page, fixture = SAMPLE_PDF): Promise<string> {
   const created = await page.request.post('/api/books', {
     data: { title: 'Sample Book', author: null, format: 'pdf', sizeBytes: 100 },
   });
@@ -17,7 +19,7 @@ async function addSamplePdf(page: Page): Promise<string> {
   const put = await fetch(signedUploadUrl, {
     method: 'PUT',
     headers: { 'content-type': 'application/pdf' },
-    body: readFileSync(SAMPLE_PDF),
+    body: readFileSync(fixture),
   });
   expect(put.ok).toBe(true);
   return bookId;
@@ -248,4 +250,51 @@ test('the page never scrolls sideways on a phone', async ({ page }, testInfo) =>
   await page.goto(`/read/${id}`);
   await expect(currentPage(page).locator('canvas')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+});
+
+/** The element the pages scroll in. */
+const scrollerOf = (page: Page) =>
+  page.locator('[data-slot="1"]').evaluateHandle((slot) => slot.closest<HTMLElement>('.overflow-auto')!);
+
+test('a page change while scrolling by hand neither hides the reader nor moves the view', async ({ page }) => {
+  const id = await addSamplePdf(page, CONTENTS_PDF);
+  await page.goto(`/read/${id}`);
+  await expect(currentPage(page).locator('canvas')).toBeVisible();
+  const scroller = await scrollerOf(page);
+  const box = (await scroller.asElement()!.boundingBox())!;
+
+  // A loading page used to hide the whole reader for a frame, which put the view back at the top of the page.
+  const narrowest = await scroller.evaluateHandle((el) => {
+    let width = el.clientWidth;
+    const sample = () => {
+      width = Math.min(width, el.clientWidth);
+      frame = requestAnimationFrame(sample);
+    };
+    let frame = requestAnimationFrame(sample);
+    return {
+      stop: () => {
+        cancelAnimationFrame(frame);
+        return width;
+      },
+    };
+  });
+
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  const notches = 14;
+  for (let i = 0; i < notches; i++) {
+    await page.mouse.wheel(0, 100);
+    await page.waitForTimeout(60);
+  }
+  await expect(pageInput(page)).not.toHaveValue('1');
+  await expect.poll(() => scroller.evaluate((el) => el.scrollTop), { timeout: 3000 }).toBeCloseTo(notches * 100, -0.5);
+  await page.waitForTimeout(300);
+  expect(await scroller.evaluate((el) => el.scrollTop)).toBeCloseTo(notches * 100, -0.5);
+  expect(await narrowest.evaluate((n) => n.stop())).toBeGreaterThan(0);
+});
+
+test('a PDF that cannot be fetched says so', async ({ page }) => {
+  const id = await addSamplePdf(page);
+  await page.route('**/storage/v1/object/**', (route) => route.fulfill({ status: 500 }));
+  await page.goto(`/read/${id}`);
+  await expect(page.getByText('Could not open this PDF.')).toBeVisible();
 });
