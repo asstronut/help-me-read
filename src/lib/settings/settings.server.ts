@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { availableModels } from '@/lib/ai/models';
+import { LanguageNameSchema, languageError, type Languages } from '@/lib/languages';
 import type { Database } from '@/lib/supabase/database.types';
 import { ACTIONS, DEFAULT_MONTHLY_CAP_USD, THEMES, type Action, type Theme } from '@/lib/types';
 
@@ -8,14 +9,16 @@ type Db = SupabaseClient<Database>;
 type Row = Database['public']['Tables']['settings']['Row'];
 
 export type Settings = {
-  explanationLanguage: string;
+  translationLanguage: string;
+  answerLanguage: string;
   actionModels: Partial<Record<Action, string>>;
   monthlyCapUsd: number;
   theme: Theme;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
-  explanationLanguage: 'English',
+  translationLanguage: 'English',
+  answerLanguage: 'English',
   actionModels: {},
   monthlyCapUsd: DEFAULT_MONTHLY_CAP_USD,
   theme: 'light',
@@ -23,14 +26,16 @@ export const DEFAULT_SETTINGS: Settings = {
 
 const ActionModelsSchema = z.partialRecord(z.enum(ACTIONS), z.string());
 const SettingsSchema = z.object({
-  explanationLanguage: z.string().trim().min(1).max(40),
+  translationLanguage: LanguageNameSchema,
+  answerLanguage: LanguageNameSchema,
   actionModels: ActionModelsSchema,
   monthlyCapUsd: z.number().min(0).max(1000),
   theme: z.enum(THEMES),
 });
 
 const FIELD_LABELS: Record<string, string> = {
-  explanationLanguage: 'The language to translate into must be 1 to 40 characters',
+  translationLanguage: languageError('translation'),
+  answerLanguage: languageError('answer'),
   actionModels: 'Choose a model from the list for each action',
   monthlyCapUsd: 'Monthly cap must be between 0 and 1000',
   theme: 'Theme must be light, dark or sepia',
@@ -52,10 +57,16 @@ export function validateSettings(input: unknown): { settings: Settings } | { err
     : { error: `The model "${unavailable}" is not available` };
 }
 
+/** The Default languages every Book uses unless it has its own. */
+export function defaultLanguages(settings: Settings): Languages {
+  return { translation: settings.translationLanguage, answer: settings.answerLanguage };
+}
+
 function fromRow(row: Row): Settings {
   const models = ActionModelsSchema.safeParse(row.action_models);
   return {
-    explanationLanguage: row.explanation_language,
+    translationLanguage: row.translation_language,
+    answerLanguage: row.answer_language,
     actionModels: models.success ? models.data : {},
     monthlyCapUsd: Number(row.monthly_cap_usd),
     theme: THEMES.find((t) => t === row.theme) ?? DEFAULT_SETTINGS.theme,
@@ -83,7 +94,8 @@ export async function getSettings(supabase: Db): Promise<Settings> {
 export async function saveSettings(supabase: Db, userId: string, settings: Settings): Promise<void> {
   const { error } = await supabase.from('settings').upsert({
     owner_id: userId,
-    explanation_language: settings.explanationLanguage,
+    translation_language: settings.translationLanguage,
+    answer_language: settings.answerLanguage,
     action_models: settings.actionModels,
     monthly_cap_usd: settings.monthlyCapUsd,
     theme: settings.theme,

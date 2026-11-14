@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import { putSettings, restoreSettings } from '../helpers/settings';
 import {
   PDF_SEGMENTS,
   createThread,
@@ -128,6 +129,7 @@ beforeAll(async () => {
   ownerId = await userId(OWNER.email);
 });
 beforeEach(clearVocab);
+afterEach(() => restoreSettings(api));
 afterAll(async () => {
   await clearVocab();
   await clearCapMonth();
@@ -154,6 +156,20 @@ describe('vocab', () => {
     const prompt = await lastPrompt(api);
     expect(prompt).toContain('steep');
     expect(prompt).toContain('The bank was steep.');
+  });
+
+  test('the meaning is written in the Translation language, not the Answer language', async () => {
+    expect((await putSettings(api, { translationLanguage: 'Indonesian', answerLanguage: 'French' })).status).toBe(
+      200,
+    );
+    const bookId = await newBook(api, 'pdf', PDF_SEGMENTS);
+    const saved = await saveVocab(bookId, 'steep', 'She sat on the bank. The bank was ');
+    await expect
+      .poll(async () => (await entry(saved.id))?.meaning, { timeout: 5000, interval: 200 })
+      .toBe('MOCK ANSWER');
+    const prompt = await lastPrompt(api);
+    expect(prompt).toContain('in Indonesian');
+    expect(prompt).not.toContain('French');
   });
 
   test('the sentence follows the prefix when the term appears more than once', async () => {

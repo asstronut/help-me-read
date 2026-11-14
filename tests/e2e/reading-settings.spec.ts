@@ -1,9 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { expect, test, type Frame, type Page } from '@playwright/test';
+import { DEFAULT_SETTINGS as DEFAULTS } from '../helpers/default-settings';
 
 test.use({ storageState: 'tests/e2e/.auth/owner.json' });
-
-const DEFAULTS = { explanationLanguage: 'English', actionModels: {}, monthlyCapUsd: 10, theme: 'light' };
 
 async function addBook(page: Page, fixture: 'sample.epub' | 'styled.epub' | 'sample.pdf'): Promise<string> {
   const format = fixture.endsWith('.pdf') ? 'pdf' : 'epub';

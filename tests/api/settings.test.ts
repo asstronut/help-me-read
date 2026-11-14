@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, describe, expect, test } from 'vitest';
+import { DEFAULT_SETTINGS } from '../helpers/default-settings';
+import { putSettings, restoreSettings } from '../helpers/settings';
 import {
-  lastPrompt,
   newDefineThread,
   signedInOwner,
   streamedText,
@@ -11,15 +12,14 @@ import { OWNER, ensureUser } from '../helpers/users';
 
 type SettingsBody = {
   settings: {
-    explanationLanguage: string;
+    translationLanguage: string;
+    answerLanguage: string;
     actionModels: Record<string, string>;
     monthlyCapUsd: number;
     theme: string;
   };
   monthSpendUsd: number;
 };
-
-const DEFAULTS = { explanationLanguage: 'English', actionModels: {}, monthlyCapUsd: 10, theme: 'light' };
 
 let api: Api;
 
@@ -28,33 +28,37 @@ const getSettings = async () => {
   expect(res.status).toBe(200);
   return (await res.json()) as SettingsBody;
 };
-const put = (body: object) => api.put('/api/settings', { ...DEFAULTS, ...body });
+const put = (change: object) => putSettings(api, change);
 
 beforeAll(async () => {
   await ensureUser(OWNER.email, OWNER.password);
   api = await signedInOwner();
 });
-// Settings belong to the shared owner, so every test hands back the defaults.
-afterEach(async () => {
-  expect((await api.put('/api/settings', DEFAULTS)).status).toBe(200);
-});
+afterEach(() => restoreSettings(api));
 
 describe('settings', () => {
   test('the first read returns the defaults and this month spend', async () => {
     const body = await getSettings();
-    expect(body.settings).toEqual(DEFAULTS);
+    expect(body.settings).toEqual(DEFAULT_SETTINGS);
     expect(body.monthSpendUsd).toBeGreaterThanOrEqual(0);
   });
 
   test('a saved setting is read back', async () => {
-    expect((await put({ explanationLanguage: 'French', monthlyCapUsd: 12.5, theme: 'sepia' })).status).toBe(
-      200,
-    );
+    expect((await put({ monthlyCapUsd: 12.5, theme: 'sepia' })).status).toBe(200);
     expect((await getSettings()).settings).toEqual({
-      ...DEFAULTS,
-      explanationLanguage: 'French',
+      ...DEFAULT_SETTINGS,
       monthlyCapUsd: 12.5,
       theme: 'sepia',
+    });
+  });
+
+  test('both languages are saved, each on its own, and trimmed', async () => {
+    expect((await put({ translationLanguage: ' Indonesian ', answerLanguage: 'French' })).status).toBe(
+      200,
+    );
+    expect((await getSettings()).settings).toMatchObject({
+      translationLanguage: 'Indonesian',
+      answerLanguage: 'French',
     });
   });
 
@@ -63,19 +67,29 @@ describe('settings', () => {
     ['a cap above 1000', { monthlyCapUsd: 1001 }],
     ['an unknown theme', { theme: 'blue' }],
     ['an unknown model', { actionModels: { define: 'nope' } }],
-    ['an empty language', { explanationLanguage: '' }],
-    ['a language over 40 characters', { explanationLanguage: 'x'.repeat(41) }],
   ])('%s is refused', async (_name, change) => {
     expect((await put(change)).status).toBe(400);
-    expect((await getSettings()).settings).toEqual(DEFAULTS);
+    expect((await getSettings()).settings).toEqual(DEFAULT_SETTINGS);
   });
 
-  test('the explanation language reaches the next define prompt', async () => {
-    expect((await put({ explanationLanguage: 'Indonesian' })).status).toBe(200);
-    const threadId = await newDefineThread(api);
-    const raw = await api.streamText(`/api/threads/${threadId}/chat`, {});
-    expect(streamedText(raw)).toBe('MOCK ANSWER');
-    expect(await lastPrompt(api)).toContain('Answer in Indonesian');
+  test.each([
+    ['an empty Translate into', { translationLanguage: '' }, 'Translate into must be 1 to 40 characters'],
+    [
+      'a Translate into over 40 characters',
+      { translationLanguage: 'x'.repeat(41) },
+      'Translate into must be 1 to 40 characters',
+    ],
+    ['a blank Answer in', { answerLanguage: '   ' }, 'Answer in must be 1 to 40 characters'],
+    [
+      'an Answer in over 40 characters',
+      { answerLanguage: 'x'.repeat(41) },
+      'Answer in must be 1 to 40 characters',
+    ],
+  ])('%s is refused with a message naming the field', async (_name, change, message) => {
+    const res = await put(change);
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { message: string }).message).toBe(message);
+    expect((await getSettings()).settings).toEqual(DEFAULT_SETTINGS);
   });
 
   test("a chosen model answers the next define", async () => {

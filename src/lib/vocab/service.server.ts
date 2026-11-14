@@ -10,7 +10,7 @@ import { assertWithinCap } from '@/lib/ai/spend.server';
 import { AnchorSchema, SelectionSchema } from '@/lib/selection/schema';
 import type { Database } from '@/lib/supabase/database.types';
 import type { TestControls } from '@/lib/test-controls.server';
-import { getSettings } from '@/lib/settings/settings.server';
+import { defaultLanguages, getSettings } from '@/lib/settings/settings.server';
 import type { Anchor, ReaderSelection } from '@/lib/types';
 import { sentenceAround } from './sentence';
 
@@ -151,7 +151,7 @@ async function fillMeaning(supabase: Db, entry: VocabEntryView, controls: TestCo
   const { instructions, prompt } = buildVocabMeaningPrompt(
     entry.term,
     entry.sentence,
-    settings.explanationLanguage,
+    defaultLanguages(settings),
   );
   try {
     await assertWithinCap(supabase, model, `${instructions}\n\n${prompt}`.length, controls.now);

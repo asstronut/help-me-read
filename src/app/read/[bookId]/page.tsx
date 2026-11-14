@@ -28,7 +28,7 @@ async function Reader({ params, searchParams }: PageProps) {
   await connection();
   // Only labels the Translate button, so the reader still opens if settings cannot be read.
   const language = await getSettings(await createClient()).then(
-    (s) => s.explanationLanguage,
+    (s) => s.translationLanguage,
     () => null,
   );
   // `?thread=<id>` reopens that thread beside the book; `?at=` opens the book at an anchor.

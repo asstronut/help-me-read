@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
+import { DEFAULT_SETTINGS } from '../helpers/default-settings';
 
 test.use({ storageState: 'tests/e2e/.auth/owner.json' });
 
@@ -257,9 +258,8 @@ test('a link in an answer opens in a new tab, leaving the reader in place', asyn
 });
 
 test('the panel follows the dark theme', async ({ page }) => {
-  const settings = { explanationLanguage: 'English', actionModels: {}, monthlyCapUsd: 10 };
   // Theme belongs to the shared owner, so the light default is handed back afterwards.
-  await page.request.put('/api/settings', { data: { ...settings, theme: 'dark' } });
+  await page.request.put('/api/settings', { data: { ...DEFAULT_SETTINGS, theme: 'dark' } });
   try {
     await openPdf(page);
     await defineEphemeral(page);
@@ -267,7 +267,7 @@ test('the panel follows the dark theme', async ({ page }) => {
     const background = await panel(page).evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(background).not.toBe('rgb(255, 255, 255)');
   } finally {
-    await page.request.put('/api/settings', { data: { ...settings, theme: 'light' } });
+    await page.request.put('/api/settings', { data: DEFAULT_SETTINGS });
   }
 });
 
