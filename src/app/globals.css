@@ -21,6 +21,7 @@
  *   danger   destructive actions and errors (danger-tint behind an error message)
  *   shadow   the colour of a floating surface's shadow
  *   highlight-alpha  how strong a note highlight's tint is over the text
+ *   selection  the wash behind selected text: a see-through blue, so the ink keeps its colour
  */
 :root,
 .light {
@@ -33,6 +34,7 @@
   --rule: #e2ded5;
   --accent: #3d5a80;
   --accent-tint: rgb(61 90 128 / 0.16);
+  --selection: rgb(59 130 246 / 0.26);
   --danger: #a3402c;
   --danger-tint: rgb(163 64 44 / 0.08);
   --shadow: rgb(31 29 26 / 0.12);
@@ -49,6 +51,7 @@
   --rule: #dccdae;
   --accent: #8a5a34;
   --accent-tint: rgb(138 90 52 / 0.16);
+  --selection: rgb(59 130 246 / 0.28);
   --danger: #9a3a26;
   --danger-tint: rgb(154 58 38 / 0.1);
   --shadow: rgb(62 50 38 / 0.14);
@@ -65,6 +68,7 @@
   --rule: #34322f;
   --accent: #9db4d3;
   --accent-tint: rgb(157 180 211 / 0.18);
+  --selection: rgb(96 165 250 / 0.34);
   --danger: #e59a86;
   --danger-tint: rgb(229 154 134 / 0.12);
   --shadow: rgb(0 0 0 / 0.5);
@@ -96,6 +100,16 @@
 body {
   background: var(--bg);
   color: var(--ink);
+}
+
+/*
+ * Selected text gets a see-through wash of blue. Only the background is set, so the text
+ * keeps its own colour rather than turning white. The PDF text layer names its own selection
+ * colour (and hides the one on line breaks), so it is matched here with a stronger selector.
+ */
+::selection,
+.react-pdf__Page .textLayer :not(br)::selection {
+  background: var(--selection);
 }
 
 /* A scrolling area inside the reader: a thin bar in the theme's colours, with no track or arrows. */

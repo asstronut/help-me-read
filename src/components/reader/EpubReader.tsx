@@ -129,6 +129,7 @@ function readerCss(look: Look): string {
   const theme = getComputedStyle(document.documentElement);
   const bg = theme.getPropertyValue('--bg');
   const ink = theme.getPropertyValue('--ink');
+  const selection = theme.getPropertyValue('--selection');
   // Each variable holds a list such as `"Literata", "Literata Fallback"`. All three typefaces are
   // declared in the chapter, so a switch needs no new rules; only the chosen one is downloaded.
   const fonts = Object.values(TYPEFACE_FONTS).map((f) => theme.getPropertyValue(f.variable).trim());
@@ -139,6 +140,7 @@ function readerCss(look: Look): string {
   return `${readingFontFaces}
 html, body, p { font-size: ${look.fontSize}px !important; }
 html, body { background: ${bg} !important; color: ${ink} !important; }
+::selection { background: ${selection} !important; }
 html, body, div, section, article, p, li, blockquote, dd, dt {
   font-family: ${family} !important;
   line-height: ${LINE_HEIGHTS[look.lineSpacing]} !important;
