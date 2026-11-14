@@ -124,6 +124,10 @@ let readingFontFaces: string | null = null;
  * chapter is drawn in an iframe, which inherits none of the page's fonts or CSS variables, so
  * they are copied in here. The typeface is set on each text block rather than inherited from the
  * body, since many books wrap every chapter in a div that names its own font.
+ *
+ * foliate paints the margin around the chapter with the background it read when the chapter
+ * loaded, and repaints it on each `setStyles` from that saved value unless the chapter's html
+ * sets `--theme-bg-color`. Setting it makes a theme switch recolour the margin too.
  */
 function readerCss(look: Look): string {
   const theme = getComputedStyle(document.documentElement);
@@ -141,6 +145,7 @@ function readerCss(look: Look): string {
 html, body, p { font-size: ${look.fontSize}px !important; }
 html, body { background: ${bg} !important; color: ${ink} !important; }
 ::selection { background: ${selection} !important; }
+html { --theme-bg-color: ${bg}; }
 html, body, div, section, article, p, li, blockquote, dd, dt {
   font-family: ${family} !important;
   line-height: ${LINE_HEIGHTS[look.lineSpacing]} !important;

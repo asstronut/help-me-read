@@ -169,6 +169,41 @@ test('the theme chosen in Aa recolours the book and is saved to the settings', a
   await expect(page.getByRole('radio', { name: 'Dark' })).toBeChecked();
 });
 
+/**
+ * Whether the reader's margin, at the top left of the page column, is the theme's
+ * background. foliate paints that margin in a closed shadow root, so it is compared by pixels
+ * with a probe painted in `--bg`.
+ */
+async function marginIsThemed(page: Page): Promise<boolean> {
+  const box = (await page.locator('foliate-view').boundingBox())!;
+  const clip = { x: Math.round(box.x) + 2, y: Math.round(box.y) + 4, width: 4, height: 4 };
+  const margin = await page.screenshot({ clip });
+  await page.evaluate(({ x, y, width, height }) => {
+    const probe = document.createElement('div');
+    probe.id = 'bg-probe';
+    probe.style.cssText = `position:fixed;left:${x}px;top:${y}px;width:${width}px;height:${height}px;background:var(--bg);z-index:2147483647`;
+    document.body.append(probe);
+  }, clip);
+  const themed = await page.screenshot({ clip });
+  await page.evaluate(() => document.getElementById('bg-probe')?.remove());
+  return margin.equals(themed);
+}
+
+test('the margin around the page follows each theme switch', async ({ page }) => {
+  const id = await addBook(page, 'sample.epub');
+  await page.goto(`/read/${id}`);
+  await expect.poll(async () => (await paragraph(page)).background).toBe('rgb(251, 250, 247)');
+  await expect.poll(() => marginIsThemed(page)).toBe(true);
+
+  await openSettings(page);
+  const theme = settings(page).getByRole('radiogroup', { name: 'Theme' });
+  for (const name of ['Dark', 'Sepia', 'Light', 'Dark', 'Sepia']) {
+    await theme.getByRole('radio', { name }).click();
+    await expect(page.locator('html')).toHaveClass(new RegExp(`\\b${name.toLowerCase()}\\b`));
+    await expect.poll(() => marginIsThemed(page)).toBe(true);
+  }
+});
+
 test('a theme that cannot be saved goes back and says so', async ({ page }) => {
   const id = await addBook(page, 'sample.epub');
   await page.goto(`/read/${id}`);
