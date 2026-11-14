@@ -14,7 +14,7 @@ From the repo root:
 ```bash
 npx supabase login
 npx supabase link --project-ref <project-ref>
-npx supabase db push
+npx supabase db push --remote
 ```
 
 `db push` applies `supabase/migrations/0001_init.sql`: the tables, row-level security, and the private `books` Storage bucket with its policy (each user can only touch files under their own user id).
@@ -23,7 +23,7 @@ Storage limits on the free plan: 50 MB per file and 1 GB in total. The app refus
 
 ## 3. Turn off sign-ups and create the user
 
-1. **Authentication > Sign In / Providers** (older dashboards: **Authentication > Providers**): turn **Allow new users to sign up** off. Keep the **Email** provider enabled. Turning the Email provider itself off would disable email logins, not just sign-ups. This matches the local `supabase/config.toml`, where `[auth] enable_signup = false` and `[auth.email] enable_signup = true`.
+1. **Authentication > Sign In / Providers** (older dashboards: **Authentication > Providers**): turn **Allow new users to sign up** off. Keep the **Email** provider enabled. Turning the Email provider itself off would disable email logins, not just sign-ups. This matches the local `supabase/config.toml`, where `[auth] enable_signup = false` and `[auth.email] enabled = true`.
 2. **Authentication > Users > Add user > Create new user**: enter the email you will put in `ALLOWED_EMAIL` and a password, and tick **Auto Confirm User**. The login page accepts this email and password, or a magic link emailed to it.
 
 ## 4. Create the Vercel project
