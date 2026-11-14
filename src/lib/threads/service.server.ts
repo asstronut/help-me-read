@@ -9,7 +9,8 @@ import { getLanguageModel } from '@/lib/ai/registry.server';
 import { assertWithinCap } from '@/lib/ai/spend.server';
 import { buildContext } from '@/lib/context/build';
 import type { Languages } from '@/lib/languages';
-import { defaultLanguages, getSettings } from '@/lib/settings/settings.server';
+import { getBookLanguages } from '@/lib/languages.server';
+import { getSettings } from '@/lib/settings/settings.server';
 import { SelectionSchema } from '@/lib/selection/schema';
 import type { Database } from '@/lib/supabase/database.types';
 import type { TestControls } from '@/lib/test-controls.server';
@@ -79,7 +80,8 @@ export async function createThread(
   if (segmentError) throw segmentError;
   if (!segment) throw fail(400, 'The selection is in an unknown segment');
 
-  const languages = defaultLanguages(await getSettings(supabase));
+  const bookLanguages = await getBookLanguages(supabase, bookId);
+  if (!bookLanguages) throw BOOK_NOT_FOUND();
   const { data: highlight, error: highlightError } = await supabase
     .from('highlights')
     .insert({
@@ -101,8 +103,8 @@ export async function createThread(
       highlight_id: highlight.id,
       action,
       context_scope: scope,
-      translation_language: languages.translation,
-      answer_language: languages.answer,
+      translation_language: bookLanguages.effective.translation,
+      answer_language: bookLanguages.effective.answer,
     })
     .select('id')
     .single();

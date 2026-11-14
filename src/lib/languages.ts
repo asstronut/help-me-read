@@ -24,3 +24,25 @@ export const LanguageNameSchema = z.string().trim().min(1).max(40);
 
 export const languageError = (field: keyof Languages) =>
   `${LANGUAGE_LABELS[field]} must be 1 to 40 characters`;
+
+/** A Book's own choice for each language; null follows the Default language. */
+export type LanguageOverrides = { translation: string | null; answer: string | null };
+
+/** The one rule for which languages a Book uses: its own override, else the default. */
+export function resolveLanguages(defaults: Languages, overrides: LanguageOverrides): Languages {
+  return {
+    translation: overrides.translation ?? defaults.translation,
+    answer: overrides.answer ?? defaults.answer,
+  };
+}
+
+/** A Book's languages: what it uses now, and what that comes from. */
+export type BookLanguages = {
+  effective: Languages;
+  overrides: LanguageOverrides;
+  defaults: Languages;
+};
+
+export function bookLanguages(defaults: Languages, overrides: LanguageOverrides): BookLanguages {
+  return { effective: resolveLanguages(defaults, overrides), overrides, defaults };
+}

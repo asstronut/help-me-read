@@ -7,6 +7,7 @@ import { availableModels, resolveModel } from '@/lib/ai/models';
 import { buildVocabMeaningPrompt } from '@/lib/ai/prompts';
 import { getLanguageModel } from '@/lib/ai/registry.server';
 import { assertWithinCap } from '@/lib/ai/spend.server';
+import { getBookLanguages } from '@/lib/languages.server';
 import { AnchorSchema, SelectionSchema } from '@/lib/selection/schema';
 import type { Database } from '@/lib/supabase/database.types';
 import type { TestControls } from '@/lib/test-controls.server';
@@ -148,10 +149,12 @@ export async function saveVocab(
 async function fillMeaning(supabase: Db, entry: VocabEntryView, controls: TestControls) {
   const settings = await getSettings(supabase);
   const model = resolveModel('define', settings.actionModels, availableModels(process.env));
+  // An entry whose Book is gone follows the defaults.
+  const book = entry.bookId ? await getBookLanguages(supabase, entry.bookId) : null;
   const { instructions, prompt } = buildVocabMeaningPrompt(
     entry.term,
     entry.sentence,
-    defaultLanguages(settings),
+    book?.effective ?? defaultLanguages(settings),
   );
   try {
     await assertWithinCap(supabase, model, `${instructions}\n\n${prompt}`.length, controls.now);

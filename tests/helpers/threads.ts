@@ -50,7 +50,12 @@ export async function listModels(api: Api): Promise<ModelView[]> {
   return ((await res.json()) as { models: ModelView[] }).models;
 }
 
-export async function newBook(api: Api, format: 'pdf' | 'epub', segments: Segment[] | null) {
+export async function newBook(
+  api: Api,
+  format: 'pdf' | 'epub',
+  segments: Segment[] | null,
+  options: { stored?: boolean } = {},
+) {
   const res = await api.post('/api/books', {
     title: 'Sample Book',
     author: 'Test Author',
@@ -58,7 +63,15 @@ export async function newBook(api: Api, format: 'pdf' | 'epub', segments: Segmen
     sizeBytes: 1234,
   });
   expect(res.status).toBe(201);
-  const { bookId } = (await res.json()) as { bookId: string };
+  const { bookId, signedUploadUrl } = (await res.json()) as { bookId: string; signedUploadUrl: string };
+  if (options.stored) {
+    const put = await fetch(signedUploadUrl, {
+      method: 'PUT',
+      headers: { 'content-type': format === 'pdf' ? 'application/pdf' : 'application/epub+zip' },
+      body: new TextEncoder().encode('fake book file'),
+    });
+    expect(put.ok).toBe(true);
+  }
   if (segments) {
     const posted = await api.post(`/api/books/${bookId}/segments`, { segments, done: true });
     expect(posted.status).toBe(204);

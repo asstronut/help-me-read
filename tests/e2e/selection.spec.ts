@@ -87,12 +87,16 @@ async function doubleClickPdfWord(page: Page, word: string) {
   await page.mouse.dblclick(box.x, box.y);
 }
 
-async function openPdf(page: Page) {
-  const id = await addBook(page, 'pdf');
+async function openPdfBook(page: Page, id: string) {
   await page.goto(`/read/${id}`);
   await expect(
     page.locator('.react-pdf__Page[data-page-number="1"] .react-pdf__Page__textContent'),
   ).toContainText('steep');
+}
+
+async function openPdf(page: Page) {
+  const id = await addBook(page, 'pdf');
+  await openPdfBook(page, id);
   return id;
 }
 
@@ -281,4 +285,17 @@ test('an EPUB selection starting inside a word keeps the prefix glued to it', as
   const selection = (await currentSelection(page))!;
   expect(selection.text).toBe('ridges');
   expect(selection.prefix).toMatch(/P6 past old stone b$/);
+});
+
+test("the Translate button names the book's Translation language", async ({ page }) => {
+  const id = await openPdf(page);
+  await doubleClickPdfWord(page, 'steep');
+  await expect(menu(page).getByRole('button', { name: 'Translate to English' })).toBeVisible();
+
+  // The book's override wins over the default. Books are deleted before each test, so none is left behind.
+  const res = await page.request.patch(`/api/books/${id}`, { data: { translationLanguageOverride: 'Japanese' } });
+  expect(res.ok()).toBe(true);
+  await openPdfBook(page, id);
+  await doubleClickPdfWord(page, 'steep');
+  await expect(menu(page).getByRole('button', { name: 'Translate to Japanese' })).toBeVisible();
 });

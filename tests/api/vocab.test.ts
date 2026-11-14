@@ -158,18 +158,33 @@ describe('vocab', () => {
     expect(prompt).toContain('The bank was steep.');
   });
 
-  test('the meaning is written in the Translation language, not the Answer language', async () => {
-    expect((await putSettings(api, { translationLanguage: 'Indonesian', answerLanguage: 'French' })).status).toBe(
-      200,
-    );
-    const bookId = await newBook(api, 'pdf', PDF_SEGMENTS);
+  /** Saves "steep" in the book and returns the prompt that fills its meaning. */
+  async function meaningPrompt(bookId: string): Promise<string> {
     const saved = await saveVocab(bookId, 'steep', 'She sat on the bank. The bank was ');
     await expect
       .poll(async () => (await entry(saved.id))?.meaning, { timeout: 5000, interval: 200 })
       .toBe('MOCK ANSWER');
-    const prompt = await lastPrompt(api);
+    return lastPrompt(api);
+  }
+
+  test('the meaning is written in the Translation language, not the Answer language', async () => {
+    expect((await putSettings(api, { translationLanguage: 'Indonesian', answerLanguage: 'French' })).status).toBe(
+      200,
+    );
+    const prompt = await meaningPrompt(await newBook(api, 'pdf', PDF_SEGMENTS));
     expect(prompt).toContain('in Indonesian');
     expect(prompt).not.toContain('French');
+  });
+
+  test("the meaning is written in the book's own Translation language when it has one", async () => {
+    expect((await putSettings(api, { translationLanguage: 'Indonesian' })).status).toBe(200);
+    const bookId = await newBook(api, 'pdf', PDF_SEGMENTS);
+    expect((await api.patch(`/api/books/${bookId}`, { translationLanguageOverride: 'Japanese' })).status).toBe(
+      200,
+    );
+    const prompt = await meaningPrompt(bookId);
+    expect(prompt).toContain('in Japanese');
+    expect(prompt).not.toContain('Indonesian');
   });
 
   test('the sentence follows the prefix when the term appears more than once', async () => {
