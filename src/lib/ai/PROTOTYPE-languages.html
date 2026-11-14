@@ -89,17 +89,18 @@ const Lang = (() => {
   }
 
   function buildSystemPrompt(action, { translation, answer }) {
-    const instr = {
-      translate: `Translate the selected text naturally into ${translation}. Add one line of notes, in ${answer}, only if a phrase has no direct equivalent.`,
-      define: 'Define the selected term (term, part of speech, IPA, meaning in context, one example).',
-      explain: 'Explain what the selected passage means and why it matters in context, in one short paragraph.',
-      simplify: `Rewrite the selected text in plain, easy ${answer} at about the same length.`,
-      ask: "Answer the reader's question about the selected text, using the context given.",
+    // Each language is named once, attached to the thing it applies to: the task, then follow-ups.
+    const task = {
+      translate: `Task: translate the selected text naturally into ${translation}.\nIf a phrase has no direct equivalent, add one line of notes in ${answer}.`,
+      define: `Task: define the selected term (term, part of speech, IPA, meaning in context, one example), in ${answer}.`,
+      explain: `Task: explain what the selected passage means and why it matters in context, in one short paragraph, in ${answer}.`,
+      simplify: `Task: rewrite the selected text in plain, easy ${answer} at about the same length.`,
+      ask: `Task: answer the reader's question about the selected text, using the context given, in the language the question is written in.\nIf you can't tell, answer in ${answer}.`,
     }[action];
     return [
-      `You help a reader understand a book. Answer in ${answer}. Be brief; the reader can ask follow-ups.`,
-      `If the reader types a question, reply in the language that question is written in; otherwise use ${answer}.`,
-      instr,
+      'You help a reader understand a book. Be brief; the reader can ask follow-ups.',
+      task,
+      `Follow-ups: reply in the language the reader writes in.\nIf you can't tell, reply in ${answer}.`,
     ].join('\n\n');
   }
 
