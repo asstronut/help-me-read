@@ -127,9 +127,13 @@ export default function PdfReader({
     return () => observer.disconnect();
   }, []);
 
+  // The top bar's chapter; undefined while the bookmarks are still being read.
+  const current = contents && currentPdfItem(contents, page);
+  const chapter = contents ? (current?.label ?? null) : undefined;
+
   useEffect(() => {
-    if (numPages > 0) save({ page }, page / numPages);
-  }, [page, numPages, save]);
+    if (numPages > 0) save({ page }, page / numPages, chapter);
+  }, [page, numPages, chapter, save]);
 
   useEffect(
     () =>
@@ -231,7 +235,6 @@ export default function PdfReader({
     if (ready) scrollToPage(pageRef.current);
   }, [ready, pageWidth, scrollToPage]);
 
-  const current = contents && currentPdfItem(contents, page);
   const outline = {
     items: contents,
     currentId: current?.id ?? null,
@@ -245,7 +248,7 @@ export default function PdfReader({
     <div className="flex h-dvh flex-col" data-pdf-colours={keepColours ? 'keep' : 'invert'}>
       <ReaderTopBar
         title={title}
-        chapter={current?.label ?? null}
+        chapter={chapter ?? null}
         contents={<ContentsOutline {...outline} placement="bar" />}
         highlightsOpen={highlightsOpen}
         onHighlights={onHighlights}
