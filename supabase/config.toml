@@ -221,7 +221,7 @@ web3 = 30
 [auth.email]
 # Must stay true: false disables email *logins*, not just sign-ups. Sign-ups are
 # already off for the whole project via [auth] enable_signup above.
-enable_signup = true
+enabled = true
 # If enabled, a user will be required to confirm any email change on both the old, and new email
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
@@ -258,8 +258,8 @@ otp_expiry = 3600
 # content_path = "./supabase/templates/password_changed_notification.html"
 
 [auth.sms]
-# Allow/disallow new user signups via SMS to your project.
-enable_signup = false
+# Enable/disable the SMS (phone) login provider.
+enabled = false
 # If enabled, users need to confirm their phone number before signing in.
 enable_confirmations = false
 # Template for sending OTP to users

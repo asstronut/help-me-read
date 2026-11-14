@@ -10,7 +10,7 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test:api": "vitest run",
     "e2e": "playwright test --pass-with-no-tests",
-    "db:types": "supabase gen types typescript --local > src/lib/supabase/database.types.ts"
+    "db:types": "supabase gen types typescript > src/lib/supabase/database.types.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.94",
@@ -41,7 +41,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.3",
     "pdf-lib": "^1.17.1",
-    "supabase": "^2.122.0",
+    "supabase": "^3.1.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5",
