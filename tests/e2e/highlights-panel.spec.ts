@@ -153,6 +153,29 @@ test('a click goes to the highlight; a thread opens in place of the list', async
   await expect(threadPanel(page)).toBeHidden();
 });
 
+test('in Whole page a click on a highlight shows the top of its page', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop', 'Whole page and Fit width differ on a wide window');
+  await page.addInitScript(() => localStorage.setItem('hmr.pdfFit', 'page'));
+  const bookId = await pdfWithHighlights(page);
+  await page.goto(`/read/${bookId}`);
+  await expect(page.getByLabel('Page number')).toHaveValue('1');
+
+  await bookmark(page).click();
+  await panel(page)
+    .getByRole('link', { name: /Chapter 2, page 3/ })
+    .click();
+  await expect(page.getByLabel('Page number')).toHaveValue('3');
+  // The highlight is near the top of its page, so placing it a third of the way down would put the top of the page out of view.
+  await expect
+    .poll(() =>
+      page.locator('[data-slot="3"]').evaluate((slot) => {
+        const view = slot.closest('.overflow-auto')!.getBoundingClientRect();
+        return Math.abs(slot.getBoundingClientRect().top - view.top);
+      }),
+    )
+    .toBeLessThan(1);
+});
+
 test("an EPUB's highlights are grouped by chapter and a click goes to the chapter", async ({ page }) => {
   const bookId = await addBook(page, 'epub');
   const epubSelection = (seq: number, text: string, cfi: string) => ({

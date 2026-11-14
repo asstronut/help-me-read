@@ -299,11 +299,10 @@ test('a PDF that cannot be fetched says so', async ({ page }) => {
   await expect(page.getByText('Could not open this PDF.')).toBeVisible();
 });
 
-/** Wheels down by `delta` px in 100 px notches and waits for the view to stop moving. */
+/** Wheels down by `delta` px (up when negative) in notches of at most 100 px, and waits for the view to stop moving. */
 async function wheelAndRest(page: Page, scroller: JSHandle<HTMLElement>, delta: number) {
-  const step = Math.sign(delta) * 100;
-  for (let moved = 0; moved < Math.abs(delta); moved += 100) {
-    await page.mouse.wheel(0, step);
+  for (let left = Math.abs(delta); left > 0; left -= 100) {
+    await page.mouse.wheel(0, Math.sign(delta) * Math.min(left, 100));
     await page.waitForTimeout(60);
   }
   let last = -1;
@@ -446,4 +445,57 @@ test('with reduced motion a turn cuts straight to the page', async ({ page }) =>
   await page.waitForTimeout(300);
   const tops = (await frames.evaluate((f) => f.stop())).map((f) => f.top);
   expect(tops).toEqual([0, target]);
+});
+
+/** Whole page, as the page bar's Fit to page button leaves it: through the stored preference. */
+const inWholePage = (page: Page) => page.addInitScript(() => localStorage.setItem('hmr.pdfFit', 'page'));
+
+async function hoverPages(page: Page, scroller: JSHandle<HTMLElement>) {
+  const box = (await scroller.asElement()!.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+}
+
+const slotTop = (scroller: JSHandle<HTMLElement>, n: number) =>
+  scroller.evaluate((el, n) => el.querySelector<HTMLElement>(`[data-slot="${n}"]`)!.offsetTop, n);
+
+test('in Whole page a scroll that stops just short of a page top comes to rest on it', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop', 'Whole page settles are checked on a wide window');
+  await inWholePage(page);
+  const scroller = await openContentsPdf(page);
+  await hoverPages(page, scroller);
+  const second = await slotTop(scroller, 2);
+  const notches = Math.floor(second / 100);
+  expect(second - notches * 100).toBeGreaterThan(0);
+  expect(second - notches * 100).toBeLessThan(80);
+
+  await wheelAndRest(page, scroller, notches * 100);
+  await expectPageAtTop(scroller, 2);
+  await page.waitForTimeout(500);
+  expect(await pageTopInView(scroller, 2)).toBeLessThan(1);
+  await expect(pageInput(page)).toHaveValue('2');
+});
+
+test('in Whole page one notch from a page top stays where the wheel put it', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop', 'Whole page settles are checked on a wide window');
+  await inWholePage(page);
+  const scroller = await openContentsPdf(page);
+  await hoverPages(page, scroller);
+
+  await wheelAndRest(page, scroller, 100);
+  await page.waitForTimeout(800);
+  expect(await scroller.evaluate((el) => el.scrollTop)).toBe(100);
+  await wheelAndRest(page, scroller, -100);
+  await page.waitForTimeout(800);
+  expect(await scroller.evaluate((el) => el.scrollTop)).toBe(0);
+});
+
+test('in Fit width a scroll that stops just short of a page top is left there', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop', 'compared with Whole page on a wide window');
+  const scroller = await openContentsPdf(page);
+  await hoverPages(page, scroller);
+  const second = await slotTop(scroller, 2);
+
+  await wheelAndRest(page, scroller, second - 40);
+  await page.waitForTimeout(800);
+  expect(await scroller.evaluate((el) => el.scrollTop)).toBe(second - 40);
 });

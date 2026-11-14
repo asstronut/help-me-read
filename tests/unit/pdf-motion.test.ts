@@ -1,5 +1,12 @@
 import { expect, test } from 'vitest';
-import { nextMotion, startingMotion, type MotionEvent, type MotionState } from '../../src/lib/reader/pdf-motion';
+import {
+  nextMotion,
+  settleTarget,
+  startingMotion,
+  type MotionEvent,
+  type MotionState,
+  type SettleInput,
+} from '../../src/lib/reader/pdf-motion';
 
 /** Plays the events one after another from a view resting at `top`. */
 const play = (events: MotionEvent[], top = 0): MotionState =>
@@ -74,4 +81,74 @@ test('a press during a glide keeps it from ending until the press is released', 
   const glide = play([{ type: 'turn', target: 2 }, { type: 'down' }, { type: 'rest' }]);
   expect(glide.kind).toBe('glide');
   expect(nextMotion(nextMotion(glide, { type: 'up' }), { type: 'rest' }).kind).toBe('idle');
+});
+
+// The pages of a Whole page view 700px tall: a page top every 708px.
+const TOPS = [0, 708, 1416, 2124];
+const settle = (change: Partial<SettleInput>) =>
+  settleTarget({
+    fit: 'page',
+    zoom: null,
+    reducedMotion: false,
+    from: 0,
+    end: 0,
+    viewHeight: 700,
+    tops: () => TOPS,
+    ...change,
+  });
+
+test('a scroll that stops a little short of a page top settles onto it', () => {
+  expect(settle({ from: 0, end: 700 })).toBe(708);
+  expect(settle({ from: 0, end: 640 })).toBe(708);
+});
+
+test('a scroll that goes a little past a page top settles back onto it', () => {
+  expect(settle({ from: 0, end: 716 })).toBe(708);
+  expect(settle({ from: 0, end: 780 })).toBe(708);
+});
+
+test('a scroll up settles the same way', () => {
+  expect(settle({ from: 1416, end: 720 })).toBe(708);
+  expect(settle({ from: 1416, end: 690 })).toBe(708);
+});
+
+test('a scroll that is already on a page top stays', () => {
+  expect(settle({ from: 0, end: 708 })).toBeNull();
+});
+
+test('a small scroll from a page top is never pulled back', () => {
+  expect(settle({ from: 0, end: 40 })).toBeNull();
+  expect(settle({ from: 0, end: 80 })).toBeNull();
+  expect(settle({ from: 0, end: 100 })).toBeNull();
+  expect(settle({ from: 708, end: 628 })).toBeNull();
+  expect(settle({ from: 708, end: 608 })).toBeNull();
+});
+
+test('a small scroll that starts just off a page top does not settle either', () => {
+  expect(settle({ from: 690, end: 740 })).toBeNull();
+  expect(settle({ from: 650, end: 710 })).toBeNull();
+});
+
+test('a scroll that stops far from every page top stays where it is', () => {
+  expect(settle({ from: 0, end: 400 })).toBeNull();
+  expect(settle({ from: 0, end: 1100 })).toBeNull();
+});
+
+test('the distance is 80px, or 12% of a view shorter than that allows', () => {
+  expect(settle({ from: 0, end: 628 })).toBe(708);
+  expect(settle({ from: 0, end: 627 })).toBeNull();
+  // 400px tall: 48px.
+  expect(settle({ viewHeight: 400, from: 0, end: 660 })).toBe(708);
+  expect(settle({ viewHeight: 400, from: 0, end: 659 })).toBeNull();
+});
+
+test('only Whole page at its fitted size settles, and not with reduced motion', () => {
+  expect(settle({ from: 0, end: 700 })).toBe(708);
+  expect(settle({ from: 0, end: 700, fit: 'width' })).toBeNull();
+  expect(settle({ from: 0, end: 700, zoom: 1 })).toBeNull();
+  expect(settle({ from: 0, end: 700, reducedMotion: true })).toBeNull();
+});
+
+test('a view with no pages has nothing to settle onto', () => {
+  expect(settle({ from: 0, end: 700, tops: () => [] })).toBeNull();
 });

@@ -13,6 +13,7 @@ import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { currentPdfItem, pdfContents, type ContentsItem } from '@/lib/reader/contents';
 import { listenForPageKeys, type PageTurn } from '@/lib/reader/page-keys';
+import { isWholePage } from '@/lib/reader/pdf-motion';
 import { CSS_PX_PER_POINT, zoomStep } from '@/lib/reader/pdf-zoom';
 import { PREFS, usePref, type PdfFit } from '@/lib/reader/reading-prefs';
 import { capturePdfSelection } from '@/lib/selection/capture-pdf';
@@ -157,7 +158,7 @@ export default function PdfReader({
     const visible = el && mostVisiblePage(el);
     if (visible) setPage(visible);
   }
-  const motion = usePdfMotion({ scrollRef, onGlideLost: followView });
+  const motion = usePdfMotion({ scrollRef, fit, zoom, onGlideLost: followView });
 
   const scrollToPage = useCallback((target: number) => {
     scrollRef.current?.querySelector(`[data-slot="${target}"]`)?.scrollIntoView({ block: 'start' });
@@ -165,14 +166,17 @@ export default function PdfReader({
 
   const clampPage = (n: number) => Math.min(Math.max(n, 1), Math.max(numPages, 1));
 
-  /** Goes to the page; with `y` (0 to 1 down the page), scrolls that point a third of the way down the view. */
+  /**
+   * Goes to the page; with `y` (0 to 1 down the page), scrolls that point a third of the way down
+   * the view. Whole page shows the page from its top instead, as it has the room for all of it.
+   */
   function goTo(target: number, y?: number) {
     const next = clampPage(target);
     pageRef.current = next;
     setPage(next);
     const scroller = scrollRef.current;
     const slot = scroller?.querySelector<HTMLElement>(`[data-slot="${next}"]`);
-    if (y === undefined || !scroller || !slot) scrollToPage(next);
+    if (y === undefined || isWholePage(fit, zoom) || !scroller || !slot) scrollToPage(next);
     else scroller.scrollTop = slot.offsetTop + y * slot.offsetHeight - scroller.clientHeight / 3;
   }
   /** Turns one page, gliding there. The page number goes first, so a press during the glide starts from the new page. */

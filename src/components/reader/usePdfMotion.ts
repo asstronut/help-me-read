@@ -1,10 +1,20 @@
 'use client';
 
 import { useEffect, useRef, type RefObject } from 'react';
-import { REST_MS, nextMotion, startingMotion, type Motion, type MotionEvent } from '@/lib/reader/pdf-motion';
+import {
+  REST_MS,
+  nextMotion,
+  settleTarget,
+  startingMotion,
+  type Motion,
+  type MotionEvent,
+} from '@/lib/reader/pdf-motion';
+import type { PdfFit } from '@/lib/reader/reading-prefs';
 
 type Options = {
   scrollRef: RefObject<HTMLElement | null>;
+  fit: PdfFit;
+  zoom: number | null;
   /** A glide ended short of its page, as a hand scroll cut it off: the view decides the page again. */
   onGlideLost: () => void;
 };
@@ -32,13 +42,33 @@ function watchMotion(scroller: HTMLElement, latest: () => Options) {
     return atEnd || Math.abs(scroller.scrollTop - slotTop(scroller, target)) <= 1;
   }
 
+  /** Eases a hand scroll that stopped just off a page top onto it (Whole page only). */
+  function settle(from: number) {
+    const { fit, zoom } = latest();
+    const to = settleTarget({
+      fit,
+      zoom,
+      reducedMotion: prefersReducedMotion(),
+      from,
+      end: scroller.scrollTop,
+      viewHeight: scroller.clientHeight,
+      tops: () => [...scroller.querySelectorAll<HTMLElement>('[data-slot]')].map((s) => slotTop(scroller, s)),
+    });
+    if (to === null) return;
+    send({ type: 'settle' });
+    scroller.scrollTo({ top: to, behavior: 'smooth' });
+    // The settle may be too short to scroll at all.
+    armRest();
+  }
+
   function rest() {
     window.clearTimeout(timer);
     const before = state;
     send({ type: 'rest' });
     // A pointer or finger is still down; letting go asks again.
     if (state === before) return;
-    if (before.kind === 'glide' && !arrived(before.target)) latest().onGlideLost();
+    if (before.kind === 'user') settle(before.from);
+    else if (before.kind === 'glide' && !arrived(before.target)) latest().onGlideLost();
   }
 
   function armRest() {
@@ -66,6 +96,8 @@ function watchMotion(scroller: HTMLElement, latest: () => Options) {
   on('touchend', onTouch);
   on('touchcancel', onTouch);
   on('blur', release);
+  // The browser may keep the button's release for the menu.
+  on('contextmenu', release);
   // Where the browser says scrolling ended, the view rests sooner than the timer would say.
   const onScrollEnd = () => {
     if (state.kind === 'glide' && !arrived(state.target)) return;
@@ -102,7 +134,7 @@ function watchMotion(scroller: HTMLElement, latest: () => Options) {
   };
 }
 
-/** What the PDF's scrolling is doing (see `Motion`), and the glide a button or key turn makes. */
+/** What the PDF's scrolling is doing (see `Motion`), the glide a button or key turn makes, and the Whole page settle. */
 export function usePdfMotion(options: Options) {
   const latest = useRef(options);
   const watch = useRef<ReturnType<typeof watchMotion> | null>(null);
