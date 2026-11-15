@@ -301,6 +301,34 @@ test('Keep PDF colours in Dark stops the page being inverted', async ({ page }) 
   await expect(canvas).toHaveCSS('filter', 'none');
 });
 
+test('an undrawn PDF page shows paper in every theme, and a page still loading does not flash white in Dark', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop', 'on a phone every page of the sample is within a screen of the first');
+  const id = await addBook(page, 'sample.pdf');
+  const background = (el: Locator) => el.evaluate((node) => getComputedStyle(node).backgroundColor);
+  // The third page is more than a screen away from the first, so it is a slot with nothing drawn in it.
+  const undrawn = page.locator('[data-slot="3"]');
+  const sheet = page.locator('.react-pdf__Page').first();
+  const WHITE = 'rgb(255, 255, 255)';
+  const BLACK = 'rgb(0, 0, 0)';
+
+  for (const [theme, paper] of [['light', WHITE], ['sepia', WHITE], ['dark', BLACK]] as const) {
+    await page.request.put('/api/settings', { data: { ...DEFAULTS, theme } });
+    await page.goto(`/read/${id}`);
+    await expect(page.locator('[data-slot="1"] canvas')).toBeVisible();
+    await expect(undrawn.locator('canvas')).toHaveCount(0);
+    expect(await background(undrawn), `${theme}: undrawn slot`).toBe(paper);
+    expect(await background(sheet), `${theme}: drawn page`).toBe(paper);
+  }
+
+  // Dark with the PDF's own colours keeps white paper, as the canvases are not inverted.
+  await openSettings(page);
+  await settings(page).getByRole('checkbox', { name: 'Keep PDF colours in Dark' }).check();
+  await expect.poll(() => background(undrawn)).toBe(WHITE);
+  expect(await background(sheet)).toBe(WHITE);
+});
+
 const translateInto = (page: Page) => settings(page).getByRole('combobox', { name: 'Translate into' });
 const answerIn = (page: Page) => settings(page).getByRole('combobox', { name: 'Answer in' });
 const chosen = (select: Locator) => select.locator('option:checked');
