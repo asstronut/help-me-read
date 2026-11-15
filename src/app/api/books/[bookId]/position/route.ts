@@ -13,14 +13,36 @@ const LocationSchema = z.union([
   z.strictObject({ cfi: z.string().min(1) }),
 ]);
 
-/** A location, optionally with how far through the book it is (0 to 1), which the Library shows. */
-function parseBody(raw: unknown): { location: ReadingLocation; progress: number | undefined } | null {
+const MAX_CHAPTER_CHARS = 200;
+
+// A long label is cut, not refused: a refusal would stop the position being saved at all.
+const ChapterSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .transform((label) => [...label].slice(0, MAX_CHAPTER_CHARS).join(''))
+  .nullable()
+  .optional();
+
+type Body = {
+  location: ReadingLocation;
+  progress: number | undefined;
+  /** A string sets the chapter, null clears it, undefined (left out) keeps the stored one. */
+  chapter: string | null | undefined;
+};
+
+/**
+ * A location, optionally with how far through the book it is (0 to 1) and the chapter it is in,
+ * which the Library shows.
+ */
+function parseBody(raw: unknown): Body | null {
   if (typeof raw !== 'object' || raw === null) return null;
-  const { progress, ...rest } = raw as Record<string, unknown>;
+  const { progress, chapter, ...rest } = raw as Record<string, unknown>;
   const location = LocationSchema.safeParse(rest);
   const fraction = z.number().min(0).max(1).optional().safeParse(progress);
-  if (!location.success || !fraction.success) return null;
-  return { location: location.data, progress: fraction.data };
+  const label = ChapterSchema.safeParse(chapter);
+  if (!location.success || !fraction.success || !label.success) return null;
+  return { location: location.data, progress: fraction.data, chapter: label.data };
 }
 
 export async function GET(_req: Request, { params }: Ctx) {
@@ -74,7 +96,8 @@ export async function PUT(req: Request, { params }: Ctx) {
     if (error) throw error;
     const { error: openedError } = await supabase
       .from('books')
-      .update({ last_opened_at: now, progress: parsed.progress }) // an undefined progress is left out
+      // An undefined progress or chapter is left out of the update, so the stored one stays.
+      .update({ last_opened_at: now, progress: parsed.progress, chapter_label: parsed.chapter })
       .eq('id', bookId);
     if (openedError) throw openedError;
     return new Response(null, { status: 204 });

@@ -231,6 +231,8 @@ export default function EpubReader({
   const theme = useShownTheme();
   const [error, setError] = useState(false);
   const [fraction, setFraction] = useState<number | null>(null);
+  // The CFI of the page the reader is on.
+  const [cfi, setCfi] = useState<string | null>(null);
   const [contents, setContents] = useState<EpubContents | null>(null);
   // foliate's id of the contents entry the page is in.
   const [tocId, setTocId] = useState<number | null>(null);
@@ -311,9 +313,8 @@ export default function EpubReader({
       view.style.cssText = 'display:block;width:100%;height:100%';
       view.addEventListener('relocate', (e) => {
         const { cfi, fraction, tocItem } = (e as CustomEvent<RelocateDetail>).detail;
-        const known = typeof fraction === 'number' ? fraction : null;
-        save({ cfi }, known);
-        if (known !== null) setFraction(known);
+        setCfi(cfi);
+        if (typeof fraction === 'number') setFraction(fraction);
         setTocId(tocItem?.id ?? null);
       });
       view.addEventListener('load', (e) => {
@@ -399,13 +400,21 @@ export default function EpubReader({
       view?.close();
       view?.remove();
     };
-  }, [bookId, fileUrl, initialCfi, save, syncAnnotations, turnPage]);
+  }, [bookId, fileUrl, initialCfi, syncAnnotations, turnPage]);
 
   useEffect(() => {
     if (viewRef.current) styleReader(viewRef.current, look);
   }, [look, theme]);
 
   const currentId = (tocId !== null && contents?.shownFor.get(tocId)) || null;
+  // The top bar's chapter; undefined until the contents are read.
+  const chapter = contents ? (findItem(contents.items, currentId)?.item.label ?? null) : undefined;
+
+  // Saved from here, not from `relocate`, whose listener cannot see the chapter once the contents load.
+  useEffect(() => {
+    if (cfi !== null) save({ cfi }, fraction, chapter);
+  }, [cfi, fraction, chapter, save]);
+
   const outline = {
     items: contents?.items ?? null,
     currentId,
@@ -419,7 +428,7 @@ export default function EpubReader({
     <div className="flex h-dvh flex-col">
       <ReaderTopBar
         title={title}
-        chapter={contents ? (findItem(contents.items, currentId)?.item.label ?? null) : null}
+        chapter={chapter ?? null}
         contents={<ContentsOutline {...outline} placement="bar" />}
         highlightsOpen={highlightsOpen}
         onHighlights={onHighlights}

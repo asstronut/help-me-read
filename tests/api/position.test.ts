@@ -3,7 +3,12 @@ import { beforeAll, describe, expect, test } from 'vitest';
 import { apiClient } from '../helpers/api-client';
 import { INTRUDER, OWNER, ensureUser } from '../helpers/users';
 
-type ListItem = { id: string; lastOpenedAt: string | null; progress: number | null };
+type ListItem = {
+  id: string;
+  lastOpenedAt: string | null;
+  progress: number | null;
+  chapter: string | null;
+};
 
 async function signedIn(user: { email: string; password: string }) {
   const api = apiClient();
@@ -123,5 +128,56 @@ describe('reading position', () => {
     }
     const { books } = (await (await api.get('/api/books')).json()) as { books: ListItem[] };
     expect(books.find((b) => b.id === id)!.progress).toBeNull();
+  });
+
+  test('the chapter saved with a position is listed with the book; leaving it out keeps it, null clears it', async () => {
+    const api = await signedIn(OWNER);
+    const id = await newBook(api, 'Chapter Book');
+    const chapter = async () =>
+      ((await (await api.get('/api/books')).json()) as { books: ListItem[] }).books.find((b) => b.id === id)!
+        .chapter;
+    expect(await chapter()).toBeNull();
+
+    expect((await api.put(`/api/books/${id}/position`, { page: 3, chapter: 'Chapter 2' })).status).toBe(204);
+    expect(await chapter()).toBe('Chapter 2');
+    // The chapter is not part of the location.
+    expect(await (await api.get(`/api/books/${id}/position`)).json()).toEqual({ location: { page: 3 } });
+
+    // A save sent before the book's contents were read leaves the chapter out, and keeps the last one.
+    expect((await api.put(`/api/books/${id}/position`, { page: 4, progress: 0.5 })).status).toBe(204);
+    expect(await chapter()).toBe('Chapter 2');
+
+    expect((await api.put(`/api/books/${id}/position`, { page: 5, chapter: 'Chapter 3' })).status).toBe(204);
+    expect(await chapter()).toBe('Chapter 3');
+
+    // Null says no contents entry covers this place.
+    expect((await api.put(`/api/books/${id}/position`, { page: 1, chapter: null })).status).toBe(204);
+    expect(await chapter()).toBeNull();
+  });
+
+  test('a chapter label is trimmed, and a very long one is cut to 200 characters rather than refused', async () => {
+    const api = await signedIn(OWNER);
+    const id = await newBook(api, 'Long Chapter Book');
+    const chapter = async () =>
+      ((await (await api.get('/api/books')).json()) as { books: ListItem[] }).books.find((b) => b.id === id)!
+        .chapter;
+
+    expect((await api.put(`/api/books/${id}/position`, { page: 1, chapter: '  Chapter 1  ' })).status).toBe(204);
+    expect(await chapter()).toBe('Chapter 1');
+
+    expect((await api.put(`/api/books/${id}/position`, { page: 2, chapter: 'é'.repeat(300) })).status).toBe(204);
+    expect(await chapter()).toBe('é'.repeat(200));
+  });
+
+  test('rejects a chapter that is not a non-empty string, or null', async () => {
+    const api = await signedIn(OWNER);
+    const id = await newBook(api, 'Bad Chapter');
+    expect((await api.put(`/api/books/${id}/position`, { page: 1, chapter: 'Kept' })).status).toBe(204);
+    for (const chapter of [7, '', '   ', true, ['Chapter 1'], {}]) {
+      expect((await api.put(`/api/books/${id}/position`, { page: 2, chapter })).status).toBe(400);
+    }
+    const { books } = (await (await api.get('/api/books')).json()) as { books: ListItem[] };
+    expect(books.find((b) => b.id === id)!.chapter).toBe('Kept');
+    expect(await (await api.get(`/api/books/${id}/position`)).json()).toEqual({ location: { page: 1 } });
   });
 });

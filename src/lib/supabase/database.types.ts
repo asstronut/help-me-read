@@ -25,14 +25,14 @@ export type Database = {
           Tables: {
             "books": {
                   Row: {
-                    "answer_language_override": string | null,"author": string | null,"created_at": string,"extracted_at": string | null,"format": string,"id": string,"last_opened_at": string | null,"owner_id": string,"progress": number | null,"segment_count": number,"size_bytes": number,"storage_path": string,"title": string,"translation_language_override": string | null
+                    "answer_language_override": string | null,"author": string | null,"chapter_label": string | null,"created_at": string,"extracted_at": string | null,"format": string,"id": string,"last_opened_at": string | null,"owner_id": string,"progress": number | null,"segment_count": number,"size_bytes": number,"storage_path": string,"title": string,"translation_language_override": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "answer_language_override"?: string | null,"author"?: string | null,"created_at"?: string,"extracted_at"?: string | null,"format": string,"id"?: string,"last_opened_at"?: string | null,"owner_id"?: string,"progress"?: number | null,"segment_count"?: number,"size_bytes": number,"storage_path": string,"title": string,"translation_language_override"?: string | null
+                    "answer_language_override"?: string | null,"author"?: string | null,"chapter_label"?: string | null,"created_at"?: string,"extracted_at"?: string | null,"format": string,"id"?: string,"last_opened_at"?: string | null,"owner_id"?: string,"progress"?: number | null,"segment_count"?: number,"size_bytes": number,"storage_path": string,"title": string,"translation_language_override"?: string | null
                   }
                   Update: {
-                    "answer_language_override"?: string | null,"author"?: string | null,"created_at"?: string,"extracted_at"?: string | null,"format"?: string,"id"?: string,"last_opened_at"?: string | null,"owner_id"?: string,"progress"?: number | null,"segment_count"?: number,"size_bytes"?: number,"storage_path"?: string,"title"?: string,"translation_language_override"?: string | null
+                    "answer_language_override"?: string | null,"author"?: string | null,"chapter_label"?: string | null,"created_at"?: string,"extracted_at"?: string | null,"format"?: string,"id"?: string,"last_opened_at"?: string | null,"owner_id"?: string,"progress"?: number | null,"segment_count"?: number,"size_bytes"?: number,"storage_path"?: string,"title"?: string,"translation_language_override"?: string | null
                   }
                   Relationships: [
                     

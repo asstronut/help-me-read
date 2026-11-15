@@ -17,7 +17,9 @@ npx supabase link --project-ref <project-ref>
 npx supabase db push --remote
 ```
 
-`db push` applies `supabase/migrations/0001_init.sql`: the tables, row-level security, and the private `books` Storage bucket with its policy (each user can only touch files under their own user id).
+`db push` applies every file in `supabase/migrations/` that the database does not have yet, in order. The first, `0001_init.sql`, creates the tables, row-level security, and the private `books` Storage bucket with its policy (each user can only touch files under their own user id). The later ones add columns the app reads.
+
+Vercel deploys each push to `master`, but it does not touch the database. When a change adds a migration, run `npx supabase db push --remote` again before or as it deploys, or the app will query columns that are not there.
 
 Storage limits on the free plan: 50 MB per file and 1 GB in total. The app refuses uploads over 50 MB.
 
