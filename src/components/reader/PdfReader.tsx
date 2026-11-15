@@ -1,9 +1,11 @@
 'use client';
 
 import {
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type MouseEvent,
@@ -76,7 +78,59 @@ function mostVisiblePage(container: HTMLElement): number | null {
   return best;
 }
 
-const onPdfPage = (h: HighlightView, page: number) => h.anchor.format === 'pdf' && h.anchor.page === page;
+const NO_HIGHLIGHTS: HighlightView[] = [];
+
+/** The PDF highlights of each page, so a page's list stays the same object while its highlights do. */
+function highlightsByPage(highlights: HighlightView[]): ReadonlyMap<number, HighlightView[]> {
+  const byPage = new Map<number, HighlightView[]>();
+  for (const h of highlights) {
+    if (h.anchor.format !== 'pdf') continue;
+    const list = byPage.get(h.anchor.page);
+    if (list) list.push(h);
+    else byPage.set(h.anchor.page, [h]);
+  }
+  return byPage;
+}
+
+type SlotProps = {
+  n: number;
+  current: boolean;
+  drawn: boolean;
+  width: number;
+  height: number;
+  highlights: HighlightView[];
+  onDrawn: (n: number) => void;
+};
+
+/**
+ * One page's place in the column. Memoized, as scrolling onto a new page changes the props of only
+ * the few slots around it, and a book can have hundreds.
+ */
+const PdfPageSlot = memo(function PdfPageSlot({ n, current, drawn, width, height, highlights, onDrawn }: SlotProps) {
+  return (
+    <div
+      data-slot={n}
+      aria-current={current ? 'page' : undefined}
+      // Paper only while nothing is drawn: a page shaped unlike the first would otherwise look as big as its slot.
+      className="not-has-[canvas]:bg-(--pdf-paper)"
+      style={{ width, minHeight: height }}
+    >
+      {drawn && (
+        <Page
+          pageNumber={n}
+          width={width}
+          // react-pdf paints the page white inline, which would flash white in Dark.
+          className="bg-(--pdf-paper)!"
+          loading=""
+          renderAnnotationLayer={false}
+          onRenderSuccess={() => onDrawn(n)}
+        >
+          <PdfHighlightLayer highlights={highlights} />
+        </Page>
+      )}
+    </div>
+  );
+});
 
 export default function PdfReader({
   bookId,
@@ -231,12 +285,13 @@ export default function PdfReader({
    * its size on screen separately, so they can differ by up to a pixel; the browser then stretches
    * the picture to fit, which blurs the text.
    */
-  function showAtPixelSize(pageNumber: number) {
+  const showAtPixelSize = useCallback((pageNumber: number) => {
     const canvas = scrollRef.current?.querySelector<HTMLCanvasElement>(`[data-slot="${pageNumber}"] canvas`);
     if (!canvas) return;
     canvas.style.width = `${canvas.width / window.devicePixelRatio}px`;
     canvas.style.height = `${canvas.height / window.devicePixelRatio}px`;
-  }
+  }, []);
+  const byPage = useMemo(() => highlightsByPage(highlights), [highlights]);
 
   function onScroll() {
     // A glide has named its page already; the view only passes through the pages on the way.
@@ -345,28 +400,16 @@ export default function PdfReader({
               {ready && (
                 <div className="mx-auto flex w-fit flex-col gap-2">
                   {Array.from({ length: numPages }, (_, i) => i + 1).map((n) => (
-                    <div
+                    <PdfPageSlot
                       key={n}
-                      data-slot={n}
-                      aria-current={n === page ? 'page' : undefined}
-                      // Paper only while nothing is drawn: a page shaped unlike the first would otherwise look as big as its slot.
-                      className="not-has-[canvas]:bg-(--pdf-paper)"
-                      style={{ width: pageWidth, minHeight: pageWidth * aspect }}
-                    >
-                      {(near.has(n) || Math.abs(n - page) <= RENDER_AROUND) && (
-                        <Page
-                          pageNumber={n}
-                          width={pageWidth}
-                          // react-pdf paints the page white inline, which would flash white in Dark.
-                          className="bg-(--pdf-paper)!"
-                          loading=""
-                          renderAnnotationLayer={false}
-                          onRenderSuccess={() => showAtPixelSize(n)}
-                        >
-                          <PdfHighlightLayer highlights={highlights.filter((h) => onPdfPage(h, n))} />
-                        </Page>
-                      )}
-                    </div>
+                      n={n}
+                      current={n === page}
+                      drawn={near.has(n) || Math.abs(n - page) <= RENDER_AROUND}
+                      width={pageWidth}
+                      height={pageWidth * aspect}
+                      highlights={byPage.get(n) ?? NO_HIGHLIGHTS}
+                      onDrawn={showAtPixelSize}
+                    />
                   ))}
                 </div>
               )}
