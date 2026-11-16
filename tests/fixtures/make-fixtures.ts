@@ -1,10 +1,11 @@
 // Generates the test books in tests/fixtures. Run: npx tsx tests/fixtures/make-fixtures.ts
 // sample.*: the books most tests use. contents.*: books with a two-level table of contents.
+// margins.pdf: a book with wide white margins, for "Crop white margins".
 import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSZip from 'jszip';
-import { PDFDocument, PDFHexString, PDFName, PDFNumber, StandardFonts, type PDFRef } from 'pdf-lib';
+import { PDFDocument, PDFHexString, PDFName, PDFNumber, StandardFonts, degrees, type PDFRef } from 'pdf-lib';
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const TITLE = 'Sample Book';
@@ -231,9 +232,63 @@ async function makeContentsPdf(): Promise<Uint8Array> {
   return doc.save();
 }
 
+/** The pages of the margins book that the crop would cut, so they are shown whole. */
+const MARGINS_STAMPED = 4;
+const MARGINS_SIDEWAYS = 6;
+const MARGINS_TURNED = 8;
+
+/**
+ * Twelve pages with the same wide white margins: the text block is 100pt in from each side and
+ * about 90pt from the top and bottom. Twelve, so one odd page does not widen the book's box.
+ * Three pages are unlike the rest: page 4 has a stamp in its left margin, page 6 is a sheet lying
+ * on its side, and page 8 is a usual sheet shown turned a quarter (/Rotate).
+ */
+async function makeMarginsPdf(): Promise<Uint8Array> {
+  const doc = await PDFDocument.create({ updateMetadata: false });
+  doc.setTitle('Margins Book');
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const size = 12;
+  // Every line ends at the same place, so every page has the same block of text.
+  const lineWidth = 412;
+  const fill = (start: string) => {
+    let line = start;
+    for (let i = 0; font.widthOfTextAtSize(`${line} ${FILLER[i % FILLER.length]}`, size) <= lineWidth; i++) {
+      line += ` ${FILLER[i % FILLER.length]}`;
+    }
+    return line;
+  };
+  for (let n = 1; n <= 12; n++) {
+    if (n === MARGINS_SIDEWAYS) {
+      const page = doc.addPage([792, 612]);
+      page.drawText(`Page ${n} lies on its side.`, { x: 200, y: 400, size, font });
+      page.drawText('A wide sheet in a book of tall ones.', { x: 200, y: 300, size, font });
+      continue;
+    }
+    const page = doc.addPage([612, 792]);
+    if (n === MARGINS_TURNED) {
+      page.setRotation(degrees(90));
+      page.drawText(`Page ${n} is turned a quarter.`, { x: 200, y: 500, size, font });
+      page.drawText('A tall sheet shown on its side.', { x: 200, y: 300, size, font });
+      continue;
+    }
+    for (let i = 0, y = 690; y >= 100; i++, y -= 20) {
+      const start = i === 0 ? `Page ${n} of the margins book.` : i === 15 ? `Middle of page ${n}.` : `Line ${i + 1}`;
+      const line = fill(start);
+      page.drawText(line, { x: 100, y, size, font });
+      // The line is drawn out to the full width, as justified text would be.
+      page.drawLine({ start: { x: 100, y: y - 4 }, end: { x: 100 + lineWidth, y: y - 4 }, thickness: 0.5 });
+    }
+    if (n === MARGINS_STAMPED) {
+      page.drawText('Stamped in the margin', { x: 40, y: 300, size: 18, font, rotate: degrees(90) });
+    }
+  }
+  return doc.save();
+}
+
 writeFileSync(join(dir, 'sample.pdf'), await makePdf());
 writeFileSync(join(dir, 'sample.epub'), await sampleEpub());
 writeFileSync(join(dir, 'contents.pdf'), await makeContentsPdf());
 writeFileSync(join(dir, 'contents.epub'), await contentsEpub());
 writeFileSync(join(dir, 'styled.epub'), await styledEpub());
-console.log('Wrote sample.pdf, sample.epub, contents.pdf, contents.epub and styled.epub');
+writeFileSync(join(dir, 'margins.pdf'), await makeMarginsPdf());
+console.log('Wrote sample.pdf, sample.epub, contents.pdf, contents.epub, styled.epub and margins.pdf');

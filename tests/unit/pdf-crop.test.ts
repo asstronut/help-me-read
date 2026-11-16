@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { NO_CROP, bookBox, inkBox, samplePages, sticksOut, type CropBox } from '../../src/lib/reader/pdf-crop';
+import { NO_CROP, bookBox, inkBox, placeInSlot, samplePages, sticksOut, type CropBox } from '../../src/lib/reader/pdf-crop';
 
 // The size a page is scanned at: about 400px wide.
 const W = 400;
@@ -128,4 +128,23 @@ test('a short book is scanned whole, a long one at 24 pages spread through it', 
   expect(long[0]).toBe(1);
   expect(long[1]).toBe(38);
   expect(long.at(-1)).toBeGreaterThan(883 - 38);
+});
+
+// A page 1000 by 1500 and a box that leaves a window 600 by 1200.
+const WINDOW: CropBox = { l: 0.25, t: 0.1, r: 0.85, b: 0.9 };
+
+test('a cropped page keeps its size and is moved so its slot shows the box', () => {
+  expect(placeInSlot(1000, 1500, WINDOW)).toEqual({ width: 1000, height: 1500, left: -250, top: -150 });
+});
+
+const closeTo = (place: object) =>
+  Object.fromEntries(Object.entries(place).map(([key, value]) => [key, expect.closeTo(value as number)]));
+
+test('a page shown whole is made as big as fits in the slot, in its middle', () => {
+  // Shaped like the usual page, so wider for its height than the slot: the width limits it.
+  expect(placeInSlot(1000, 1500, WINDOW, 1.5)).toEqual(closeTo({ width: 600, height: 900, left: 0, top: 150 }));
+  // A tall narrow page: the height limits it.
+  expect(placeInSlot(1000, 1500, WINDOW, 3)).toEqual(closeTo({ width: 400, height: 1200, left: 100, top: 0 }));
+  // A page lying on its side.
+  expect(placeInSlot(1000, 1500, WINDOW, 0.5)).toEqual(closeTo({ width: 600, height: 300, left: 0, top: 450 }));
 });
