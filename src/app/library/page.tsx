@@ -1,15 +1,17 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { SiteNav } from '@/components/SiteNav';
 import { Button, buttonClasses } from '@/components/ui/Button';
 import { cn } from '@/components/ui/cn';
 import { IconButton } from '@/components/ui/IconButton';
 import { MoreIcon, RefreshIcon } from '@/components/ui/icons';
 import { InlineAlert } from '@/components/ui/InlineAlert';
+import { FIELD } from '@/components/ui/field';
 import type { BookItem } from '@/lib/books/book-item';
 import { extractAndSave } from '@/lib/books/extract-and-save';
+import { MAX_TITLE_CHARS } from '@/lib/types';
 import { BookCover, progressLabel } from './book-cover';
 import { UploadDropzone } from './upload-dropzone';
 
@@ -19,6 +21,7 @@ export default function LibraryPage() {
   const [failed, setFailed] = useState<ReadonlySet<string>>(new Set());
   const [confirming, setConfirming] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [renaming, setRenaming] = useState<string | null>(null);
   const attempted = useRef(new Set<string>());
   // A list request sent before a delete can answer after it; deleted books stay out of the list.
   const deleted = useRef(new Set<string>());
@@ -103,6 +106,24 @@ export default function LibraryPage() {
     setConfirming(null);
   }
 
+  /** Saves a new title; resolves to an error message, or null once it is saved. */
+  async function rename(id: string, title: string): Promise<string | null> {
+    try {
+      const res = await fetch(`/api/books/${id}/title`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ title }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      const saved = ((await res.json()) as { title: string }).title;
+      setBooks((current) => current?.map((b) => (b.id === id ? { ...b, title: saved } : b)) ?? null);
+      setRenaming(null);
+      return null;
+    } catch {
+      return 'Could not rename this book. Please try again.';
+    }
+  }
+
   // The list comes newest-opened first, so the first opened book is the one read last.
   const continuing = books?.find((b) => b.lastOpenedAt !== null) ?? null;
 
@@ -135,9 +156,19 @@ export default function LibraryPage() {
                 onRetry={() => retry(book)}
                 confirming={confirming === book.id}
                 deleting={deleting}
-                onAskDelete={() => setConfirming(book.id)}
+                onAskDelete={() => {
+                  setRenaming(null);
+                  setConfirming(book.id);
+                }}
                 onDelete={() => void remove(book.id)}
                 onCancelDelete={() => setConfirming(null)}
+                renaming={renaming === book.id}
+                onAskRename={() => {
+                  setConfirming(null);
+                  setRenaming(book.id);
+                }}
+                onRename={(title) => rename(book.id, title)}
+                onCancelRename={() => setRenaming(null)}
               />
             ))}
           </ul>
@@ -157,6 +188,11 @@ type ShelfBookProps = {
   onAskDelete: () => void;
   onDelete: () => void;
   onCancelDelete: () => void;
+  renaming: boolean;
+  onAskRename: () => void;
+  /** Resolves to an error message, or null once the new title is saved. */
+  onRename: (title: string) => Promise<string | null>;
+  onCancelRename: () => void;
 };
 
 /** One book on the shelf: its cover (which opens it), its title, author and progress, and ⋯. */
@@ -169,6 +205,10 @@ function ShelfBook({
   onAskDelete,
   onDelete,
   onCancelDelete,
+  renaming,
+  onAskRename,
+  onRename,
+  onCancelRename,
 }: ShelfBookProps) {
   const broken = !book.extracted && failed;
   const preparing = !book.extracted && !failed;
@@ -212,8 +252,14 @@ function ShelfBook({
             </span>
           )}
         </div>
-        <BookMenu title={book.title} disabled={confirming} onDelete={onAskDelete} />
+        <BookMenu
+          title={book.title}
+          disabled={confirming || renaming}
+          onRename={onAskRename}
+          onDelete={onAskDelete}
+        />
       </div>
+      {renaming && <RenameForm title={book.title} onSave={onRename} onCancel={onCancelRename} />}
       {confirming && (
         <div className="flex flex-col gap-2 rounded-xl bg-danger-tint p-3 text-sm">
           <span>Delete this book with its highlights, threads and notes?</span>
@@ -272,8 +318,88 @@ function ContinueReading({ book }: { book: BookItem }) {
   );
 }
 
-/** The ⋯ button beside a book and the actions it opens; for now only Delete. */
-function BookMenu({ title, disabled, onDelete }: { title: string; disabled: boolean; onDelete: () => void }) {
+/** A new title for a book, under its cover: Save keeps it, Cancel or Escape leaves the old one. */
+function RenameForm({
+  title,
+  onSave,
+  onCancel,
+}: {
+  title: string;
+  onSave: (title: string) => Promise<string | null>;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState(title);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputId = useId();
+  const input = useRef<HTMLInputElement>(null);
+  // The form opens from the ⋯ menu, so the field is where the reader expects to type.
+  useEffect(() => {
+    input.current?.focus();
+    input.current?.select();
+  }, []);
+  const trimmed = value.trim();
+  const tooLong = [...trimmed].length > MAX_TITLE_CHARS;
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (trimmed === '' || tooLong) return;
+    if (trimmed === title) return onCancel();
+    setSaving(true);
+    const failure = await onSave(trimmed);
+    // On success the form is gone; only a failure needs the form back.
+    if (failure) {
+      setError(failure);
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form
+      onSubmit={submit}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && !saving) onCancel();
+      }}
+      className="flex flex-col gap-2 rounded-xl bg-chip p-3 text-sm"
+    >
+      <label htmlFor={inputId} className="font-medium">
+        Book title
+      </label>
+      <input
+        id={inputId}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        ref={input}
+        disabled={saving}
+        aria-invalid={tooLong || undefined}
+        className={cn(FIELD, 'w-full min-w-0 px-3')}
+      />
+      {tooLong && <span className="text-xs text-danger">{`At most ${MAX_TITLE_CHARS} characters.`}</span>}
+      {error && <InlineAlert>{error}</InlineAlert>}
+      <div className="flex flex-wrap gap-1">
+        <Button type="submit" variant="primary" disabled={saving || trimmed === '' || tooLong}>
+          Save
+        </Button>
+        <Button variant="quiet" onClick={onCancel} disabled={saving}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/** The ⋯ button beside a book and the actions it opens: Rename and Delete. */
+function BookMenu({
+  title,
+  disabled,
+  onRename,
+  onDelete,
+}: {
+  title: string;
+  disabled: boolean;
+  onRename: () => void;
+  onDelete: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -314,11 +440,23 @@ function BookMenu({ title, disabled, onDelete }: { title: string; disabled: bool
       {open && (
         <div
           id={menuId}
-          className="absolute top-full right-0 z-10 rounded-xl border border-rule bg-surface p-1 shadow-[0_8px_24px_var(--shadow)]"
+          className="absolute top-full right-0 z-10 flex flex-col items-stretch rounded-xl border border-rule bg-surface p-1 shadow-[0_8px_24px_var(--shadow)]"
         >
           <Button
             ref={first}
+            variant="quiet"
+            aria-label={`Rename ${title}`}
+            className="justify-start text-ink"
+            onClick={() => {
+              setOpen(false);
+              onRename();
+            }}
+          >
+            Rename
+          </Button>
+          <Button
             variant="danger"
+            className="justify-start"
             aria-label={`Delete ${title}`}
             onClick={() => {
               setOpen(false);

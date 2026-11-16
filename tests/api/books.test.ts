@@ -150,6 +150,70 @@ describe('books', () => {
     expect((await api.get('/api/books/not-a-uuid')).status).toBe(404);
   });
 
+  test('PUT title renames the book, trimmed, and the list shows the new title', async () => {
+    const api = await signedInOwner();
+    const { bookId } = await (await createBook(api, { title: 'Old Title' })).json();
+    const res = await api.put(`/api/books/${bookId}/title`, { title: '  New Title  ' });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ title: 'New Title' });
+    const { books } = (await (await api.get('/api/books')).json()) as { books: ListItem[] };
+    expect(books.find((b) => b.id === bookId)).toMatchObject({
+      title: 'New Title',
+      author: 'Some Author',
+    });
+  });
+
+  test.each([
+    ['an empty title', { title: '' }],
+    ['a blank title', { title: '   ' }],
+    ['a title over 300 characters', { title: 'x'.repeat(301) }],
+    ['a title that is not text', { title: 7 }],
+    ['no title', {}],
+  ])('%s is refused and the old title stays', async (_name, body) => {
+    const api = await signedInOwner();
+    const { bookId } = await (await createBook(api, { title: 'Kept Title' })).json();
+    const res = await api.put(`/api/books/${bookId}/title`, body);
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { message: string }).message).toBe(
+      'Title must be 1 to 300 characters',
+    );
+    const { books } = (await (await api.get('/api/books')).json()) as { books: ListItem[] };
+    expect(books.find((b) => b.id === bookId)?.title).toBe('Kept Title');
+  });
+
+  test("renaming needs a session, and another user's or an unknown book is 404", async () => {
+    const unknown = '00000000-0000-4000-8000-000000000000';
+    expect((await apiClient().put(`/api/books/${unknown}/title`, { title: 'X' })).status).toBe(401);
+
+    const admin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false } },
+    );
+    const { data: users } = await admin.auth.admin.listUsers({ perPage: 200 });
+    const intruderId = users!.users.find((u) => u.email === INTRUDER.email)!.id;
+    const { data: row, error } = await admin
+      .from('books')
+      .insert({
+        owner_id: intruderId,
+        title: 'Not Yours',
+        format: 'pdf',
+        storage_path: `${intruderId}/x.pdf`,
+        size_bytes: 10,
+      })
+      .select('id')
+      .single();
+    expect(error).toBeNull();
+
+    const api = await signedInOwner();
+    expect((await api.put(`/api/books/${row!.id}/title`, { title: 'Mine Now' })).status).toBe(404);
+    expect((await api.put(`/api/books/${unknown}/title`, { title: 'X' })).status).toBe(404);
+    expect((await api.put('/api/books/not-a-uuid/title', { title: 'X' })).status).toBe(404);
+    const { data: after } = await admin.from('books').select('title').eq('id', row!.id).single();
+    expect(after).toEqual({ title: 'Not Yours' });
+    await admin.from('books').delete().eq('id', row!.id);
+  });
+
   test('DELETE removes the book and its file', async () => {
     const api = await signedInOwner();
     const { bookId, signedUploadUrl } = await (await createBook(api)).json();

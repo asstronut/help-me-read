@@ -61,6 +61,50 @@ test('uploading a PDF shows it with its title and author, and it can be deleted'
   await expect(page.getByRole('listitem').filter({ hasText: 'Sample Book' })).toHaveCount(0);
 });
 
+test('a book can be renamed from its ⋯ menu, and Cancel or Escape keeps the old title', async ({
+  page,
+}) => {
+  await page.getByLabel('Choose a book').setInputFiles(SAMPLE_PDF);
+  const row = page.getByRole('listitem').filter({ hasText: 'Sample Book' });
+  await expect(row).toBeVisible();
+
+  await row.getByRole('button', { name: 'Options for Sample Book' }).click();
+  await row.getByRole('button', { name: 'Rename Sample Book' }).click();
+  const field = row.getByRole('textbox', { name: 'Book title' });
+  await expect(field).toBeFocused();
+  await expect(field).toHaveValue('Sample Book');
+  await field.fill('Something Else');
+  await row.getByRole('button', { name: 'Cancel' }).click();
+  await expect(field).toHaveCount(0);
+
+  await row.getByRole('button', { name: 'Options for Sample Book' }).click();
+  await row.getByRole('button', { name: 'Rename Sample Book' }).click();
+  await field.fill('Something Else');
+  await field.press('Escape');
+  await expect(field).toHaveCount(0);
+  await expect(row).toContainText('Sample Book');
+
+  // An empty title cannot be saved.
+  await row.getByRole('button', { name: 'Options for Sample Book' }).click();
+  await row.getByRole('button', { name: 'Rename Sample Book' }).click();
+  await field.fill('   ');
+  await expect(row.getByRole('button', { name: 'Save' })).toBeDisabled();
+
+  await field.fill('  My Renamed Book ');
+  const saved = page.waitForResponse((r) => r.request().method() === 'PUT');
+  await field.press('Enter');
+  expect((await saved).status()).toBe(200);
+  const renamed = page.getByRole('listitem').filter({ hasText: 'My Renamed Book' });
+  await expect(renamed).toBeVisible();
+  await expect(renamed).toContainText('Test Author');
+  await expect(renamed.getByRole('textbox', { name: 'Book title' })).toHaveCount(0);
+
+  // The new title is stored, and the menu follows it.
+  await page.reload();
+  await expect(renamed).toBeVisible();
+  await expect(renamed.getByRole('button', { name: 'Options for My Renamed Book' })).toBeVisible();
+});
+
 test('a library refresh in flight when a book is deleted does not bring it back', async ({
   page,
 }) => {
@@ -283,8 +327,9 @@ test('the ⋯ menu closes with Escape and gives focus back', async ({ page }) =>
   const options = row.getByRole('button', { name: 'Options for Sample Book' });
   await options.click();
   await expect(options).toHaveAttribute('aria-expanded', 'true');
-  await expect(row.getByRole('button', { name: 'Delete Sample Book' })).toBeFocused();
+  // Focus goes to the first action, Rename.
+  await expect(row.getByRole('button', { name: 'Rename Sample Book' })).toBeFocused();
   await page.keyboard.press('Escape');
-  await expect(row.getByRole('button', { name: 'Delete Sample Book' })).toHaveCount(0);
+  await expect(row.getByRole('button', { name: 'Rename Sample Book' })).toHaveCount(0);
   await expect(options).toBeFocused();
 });
