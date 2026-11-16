@@ -256,12 +256,10 @@ type PdfProps = {
   onFit: (fit: PdfFit) => void;
   keepColours: boolean;
   onKeepColours: (keep: boolean) => void;
-  crop: boolean;
-  onCrop: (crop: boolean) => void;
 };
 
 /** A PDF's options: the page is drawn as it is, so only how it fits and its colours in Dark. */
-export function PdfOptions({ fit, onFit, keepColours, onKeepColours, crop, onCrop }: PdfProps) {
+export function PdfOptions({ fit, onFit, keepColours, onKeepColours }: PdfProps) {
   return (
     <>
       <Row caption="Fit">
@@ -273,16 +271,6 @@ export function PdfOptions({ fit, onFit, keepColours, onKeepColours, crop, onCro
           type="checkbox"
           checked={keepColours}
           onChange={(e) => onKeepColours(e.target.checked)}
-          className="size-[18px] cursor-pointer accent-ink"
-        />
-      </label>
-      {/* PROTOTYPE (issue #37) */}
-      <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-sm">
-        <span>Crop white margins</span>
-        <input
-          type="checkbox"
-          checked={crop}
-          onChange={(e) => onCrop(e.target.checked)}
           className="size-[18px] cursor-pointer accent-ink"
         />
       </label>

@@ -33,8 +33,6 @@ export const PREFS = {
   pdfFit: { key: 'hmr.pdfFit', values: PDF_FITS, fallback: 'width' } as Pref<PdfFit>,
   contentsOpen: { key: 'hmr.contentsOpen', values: [true, false], fallback: true } as Pref<boolean>,
   keepPdfColours: { key: 'hmr.keepPdfColours', values: [false, true], fallback: false } as Pref<boolean>,
-  // PROTOTYPE (issue #37)
-  pdfCrop: { key: 'hmr.pdfCrop', values: [false, true], fallback: false } as Pref<boolean>,
 };
 
 export function readPref<T extends string | number | boolean>(pref: Pref<T>): T {
