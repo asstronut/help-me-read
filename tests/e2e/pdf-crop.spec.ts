@@ -457,3 +457,88 @@ test('a book whose text already reaches the edges is shown as without the option
   await openSettings(page);
   await expect(cropOption(page)).toBeChecked();
 });
+
+const savedBox = (page: Page, id: string) => page.evaluate((id) => localStorage.getItem(`hmr.pdfCrop.${id}`), id);
+
+test('on the first open with the option on, the pages appear already cropped, not at one size then another', async ({
+  page,
+}) => {
+  const id = await addPdf(page);
+  // The share of page 1 its slot shows the first moment the slot is there.
+  await page.addInitScript(() => {
+    const w = window as unknown as { firstShare?: number };
+    new MutationObserver((_, observer) => {
+      const slot = document.querySelector('[data-slot="1"]');
+      const sheet = slot?.querySelector('.react-pdf__Page');
+      if (!slot || !sheet) return;
+      w.firstShare = slot.getBoundingClientRect().width / sheet.getBoundingClientRect().width;
+      observer.disconnect();
+    }).observe(document, { childList: true, subtree: true });
+  });
+  await openCropped(page, id);
+  await expectCropped(page);
+  const first = await page.evaluate(() => (window as unknown as { firstShare?: number }).firstShare);
+  expect(first).toBeDefined();
+  expect(first!).toBeCloseTo(await slotShare(page, 1), 2);
+});
+
+test('the box is remembered per book: a second open is cropped at once, without looking for the box again', async ({
+  page,
+}) => {
+  const id = await addPdf(page);
+  await openCropped(page, id);
+  await expectCropped(page);
+  await expect.poll(() => savedBox(page, id)).not.toBeNull();
+  const found = JSON.parse((await savedBox(page, id))!) as { box: { l: number; t: number; r: number; b: number } };
+
+  // A box a little wider than the one found, stored in its place: the reader can only show it if it
+  // uses the stored box, and a new search would store the found one again.
+  const { l, t, r, b } = found.box;
+  const wider = { l: Math.max(0, l - 0.04), t: Math.max(0, t - 0.04), r: Math.min(1, r + 0.04), b: Math.min(1, b + 0.04) };
+  const stored = JSON.stringify({ ...found, box: wider });
+  await page.evaluate(([id, stored]) => localStorage.setItem(`hmr.pdfCrop.${id}`, stored), [id, stored]);
+
+  await page.reload();
+  await expect(textLayer(page, 1)).not.toBeEmpty();
+  await expect.poll(() => slotShare(page, 1)).toBeCloseTo(wider.r - wider.l, 2);
+  // Long enough for a search of twelve pages to have finished and stored its box.
+  await page.waitForTimeout(1500);
+  expect(await savedBox(page, id)).toBe(stored);
+  expect(await slotShare(page, 1)).toBeCloseTo(wider.r - wider.l, 2);
+});
+
+test('a book not worth cropping is remembered as such', async ({ page }) => {
+  const doc = await PDFDocument.create();
+  for (let i = 0; i < 2; i++) doc.addPage([612, 792]).drawRectangle({ x: 12, y: 100, width: 588, height: 600 });
+  const id = await addPdf(page, await doc.save());
+  await openCropped(page, id);
+  await expect(pdfPage(page, 1).locator('canvas')).toBeVisible();
+  await expect.poll(() => savedBox(page, id)).toBe(JSON.stringify({ v: 1, box: null }));
+  expect(await slotShare(page, 1)).toBeCloseTo(1, 2);
+});
+
+test('turning the option on and off keeps the same page current', async ({ page }) => {
+  const id = await addPdf(page);
+  await page.goto(`/read/${id}`);
+  await expect(textLayer(page, 1)).not.toBeEmpty();
+  await pageInput(page).fill('5');
+  await pageInput(page).press('Enter');
+  await expect(textLayer(page, 5)).not.toBeEmpty();
+  // Partway down page 5, as a reader would be.
+  await slot(page, 5).evaluate((el: HTMLElement) => {
+    el.closest<HTMLElement>('.overflow-auto')!.scrollTop += el.offsetHeight / 4;
+  });
+  await page.waitForTimeout(300);
+  await expect(pageInput(page)).toHaveValue('5');
+
+  for (const on of [true, false, true]) {
+    await openSettings(page);
+    await cropOption(page).setChecked(on);
+    await closeSettings(page);
+    if (on) await expectCropped(page, 5);
+    else await expect.poll(() => slotShare(page, 5)).toBeCloseTo(1, 2);
+    await page.waitForTimeout(500);
+    await expect(pageInput(page)).toHaveValue('5');
+    expect(await slotTopInView(page, 5)).toBeLessThan(2);
+  }
+});
