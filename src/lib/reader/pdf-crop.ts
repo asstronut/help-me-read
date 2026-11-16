@@ -114,12 +114,49 @@ export function sticksOut(page: CropBox, book: CropBox): boolean {
   );
 }
 
+/** A page's width and height where it is drawn, and how far its corner is from its slot's, rightwards and down. */
+export type PagePlace = { width: number; height: number; left: number; top: number };
+
+/**
+ * Where a page goes in its slot. The slot is a window with the size of `box` on a page `width` by
+ * `height` (the book's usual page, drawn whole): such a page is moved up and left so the window
+ * shows the box. A page that must be shown whole (`ownAspect` is its own height / width) is made
+ * as big as fits in the window, in its middle.
+ */
+export function placeInSlot(width: number, height: number, box: CropBox, ownAspect: number | null = null): PagePlace {
+  if (ownAspect === null) return { width, height, left: -box.l * width, top: -box.t * height };
+  const slotWidth = width * (box.r - box.l);
+  const slotHeight = height * (box.b - box.t);
+  const fitted = Math.min(slotWidth, slotHeight / ownAspect);
+  return {
+    width: fitted,
+    height: fitted * ownAspect,
+    left: (slotWidth - fitted) / 2,
+    top: (slotHeight - fitted * ownAspect) / 2,
+  };
+}
+
 /** The pages (1-based) scanned in a book of `numPages`: at most `SAMPLES`, spread evenly from the first. */
 export function samplePages(numPages: number): number[] {
   const step = Math.max(1, Math.ceil(numPages / SAMPLES));
   const pages: number[] = [];
   for (let n = 1; n <= numPages; n += step) pages.push(n);
   return pages;
+}
+
+/**
+ * The ink box of a page already drawn (its canvas), scanned from a small copy of it. Runs in the
+ * browser. Null for a blank page, or when the browser gives no canvas to copy onto.
+ */
+export function inkBoxOfCanvas(source: HTMLCanvasElement): CropBox | null {
+  if (source.width === 0 || source.height === 0) return null;
+  const small = document.createElement('canvas');
+  small.width = Math.min(SCAN_WIDTH, source.width);
+  small.height = Math.max(1, Math.round((source.height * small.width) / source.width));
+  const context = small.getContext('2d', { willReadFrequently: true });
+  if (!context) return null;
+  context.drawImage(source, 0, 0, small.width, small.height);
+  return inkBox(context.getImageData(0, 0, small.width, small.height).data, small.width, small.height);
 }
 
 /** The slice of pdf.js's document proxy used here (see `PDFDocumentProxy` in pdfjs-dist). */
