@@ -293,7 +293,8 @@ export default function PdfReader({
     scrollRef.current?.querySelector(`[data-slot="${target}"]`)?.scrollIntoView({ block: 'start' });
   }, []);
 
-  const clampPage = (n: number) => Math.min(Math.max(n, 1), Math.max(numPages, 1));
+  // Before the PDF has loaded its length is unknown: a page typed then is kept, and capped once it loads.
+  const clampPage = (n: number) => (numPages > 0 ? Math.min(Math.max(n, 1), numPages) : Math.max(n, 1));
 
   /**
    * Goes to the page; with `y` (0 to 1 down the page), scrolls that point a third of the way down
@@ -492,6 +493,7 @@ export default function PdfReader({
                   setAspect(height / width);
                   setRealWidth(width * CSS_PX_PER_POINT);
                   setNumPages(doc.numPages);
+                  pageRef.current = Math.min(pageRef.current, doc.numPages);
                   setPage((p) => Math.min(p, doc.numPages));
                 }, () => setError(true));
               }}
