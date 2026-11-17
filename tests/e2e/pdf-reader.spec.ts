@@ -91,6 +91,27 @@ test('typing a page number jumps to it', async ({ page }) => {
   await expect(currentPage(page)).toBeInViewport({ ratio: 0.5 });
 });
 
+test('a page number typed before the PDF has loaded is kept', async ({ page }) => {
+  const id = await addSamplePdf(page);
+  // Hold the PDF back, so the number is typed while the reader does not yet know how many pages there are.
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  let requested!: () => void;
+  const asked = new Promise<void>((resolve) => (requested = resolve));
+  await page.route('**/storage/v1/object/sign/**', async (route) => {
+    requested();
+    await held;
+    await route.continue();
+  });
+  await page.goto(`/read/${id}`);
+  await asked;
+  await pageInput(page).fill('3');
+  await pageInput(page).press('Enter');
+  release();
+  await expect(currentPage(page)).toHaveAttribute('data-page-number', '3');
+  await expect(currentPage(page)).toBeInViewport({ ratio: 0.5 });
+});
+
 test('the keyboard turns pages, but not while typing a page number', async ({ page }) => {
   const id = await addSamplePdf(page);
   await page.goto(`/read/${id}`);
