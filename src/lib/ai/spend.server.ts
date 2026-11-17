@@ -15,15 +15,12 @@ function utcMonth(now: Date): { start: string; end: string } {
   return { start: new Date(start).toISOString(), end: new Date(end).toISOString() };
 }
 
+// Summed in the database: selecting the rows would be cut off at the API's max_rows, with no error.
 async function monthSpendMicroUsd(supabase: Db, now: Date): Promise<number> {
   const { start, end } = utcMonth(now);
-  const [messages, events] = await Promise.all([
-    supabase.from('messages').select('cost_usd').gte('created_at', start).lt('created_at', end),
-    supabase.from('usage_events').select('cost_usd').gte('created_at', start).lt('created_at', end),
-  ]);
-  if (messages.error) throw messages.error;
-  if (events.error) throw events.error;
-  return [...messages.data, ...events.data].reduce((sum, row) => sum + toMicro(row.cost_usd), 0);
+  const { data, error } = await supabase.rpc('month_spend', { period_start: start, period_end: end });
+  if (error) throw error;
+  return toMicro(data);
 }
 
 export async function getSpend(
