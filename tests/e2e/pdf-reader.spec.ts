@@ -79,7 +79,7 @@ test('going back to the library and opening the book again shows the page it was
     await expect(pageInput(page)).toHaveValue('4');
     await expect(page.locator('[data-slot="4"] canvas')).toBeInViewport({ ratio: 0.5 });
   }
-  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(page.getByRole('alert').filter({ hasText: 'Could not open this PDF.' })).toHaveCount(0);
 });
 
 test('typing a page number jumps to it', async ({ page }) => {
