@@ -9,13 +9,15 @@ const elementOf = (node: Node): Element | null =>
 
 // Each page's text layer is a block of its own; its lines are split by <br>.
 const isTextLayer = (el: Element) => el.matches(TEXT_LAYER);
+// Read the text as extraction (src/lib/extract/pdf.ts) does, so it is found in the page's paragraphs.
+const pdfText = (range: Range) => plainText(range, isTextLayer, { joinHyphenatedLines: true });
 
 /**
  * Reads a selection made in a PDF text layer. It belongs to the page it starts on:
  * the rects cover only that page's part of it, normalised to the page.
  */
 export function capturePdfSelection(range: Range, bookId: string): ReaderSelection | null {
-  const text = plainText(range, isTextLayer).trim();
+  const text = pdfText(range).trim();
   const pageEl = elementOf(range.startContainer)?.closest(PAGE);
   const layer = pageEl?.querySelector(TEXT_LAYER);
   if (!text || !pageEl || !layer) return null;
@@ -24,7 +26,7 @@ export function capturePdfSelection(range: Range, bookId: string): ReaderSelecti
   const before = document.createRange();
   before.setStart(layer, 0);
   before.setEnd(range.startContainer, range.startOffset);
-  const prefix = plainText(before, isTextLayer).trimStart().slice(-PREFIX_CHARS);
+  const prefix = pdfText(before).trimStart().slice(-PREFIX_CHARS);
 
   return {
     bookId,

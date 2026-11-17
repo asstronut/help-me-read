@@ -65,6 +65,33 @@ async function selectOnFirstPage(page: Page, text: string) {
   }, text);
 }
 
+/** Selects from the start of `from` to the end of `to` in page 1's text layer, across its lines. */
+async function selectAcrossLines(page: Page, from: string, to: string) {
+  await page.evaluate(
+    ({ from, to }) => {
+      const layer = document.querySelector(
+        '.react-pdf__Page[data-page-number="1"] .react-pdf__Page__textContent',
+      )!;
+      const walker = document.createTreeWalker(layer, NodeFilter.SHOW_TEXT);
+      const nodes: Text[] = [];
+      while (walker.nextNode()) nodes.push(walker.currentNode as Text);
+      const find = (text: string) => {
+        const node = nodes.find((n) => n.data.includes(text));
+        if (!node) throw new Error(`"${text}" not on page 1`);
+        return { node, at: node.data.indexOf(text) };
+      };
+      const start = find(from);
+      const end = find(to);
+      const range = document.createRange();
+      range.setStart(start.node, start.at);
+      range.setEnd(end.node, end.at + to.length);
+      document.getSelection()!.removeAllRanges();
+      document.getSelection()!.addRange(range);
+    },
+    { from, to },
+  );
+}
+
 test.beforeEach(async ({ page }) => {
   const { books } = (await (await page.request.get('/api/books')).json()) as {
     books: { id: string }[];
@@ -116,4 +143,23 @@ test('Save to vocab saves a word that the vocab page can search, jump to, export
   await expect(row).toHaveCount(0);
   await page.reload();
   await expect(page.getByText('steep')).toHaveCount(0);
+});
+
+test('a word hyphenated across lines is saved joined, with its sentence', async ({ page }) => {
+  const bookId = await addPdf(page);
+  await page.goto(`/read/${bookId}`);
+  await expect(textLayer(page, 1)).toContainText('ephem-');
+  await selectAcrossLines(page, 'ephem-', 'eral');
+  await menu(page).getByRole('button', { name: 'Save to vocab' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Saved to vocab' })).toBeVisible();
+
+  const { entries } = (await (await page.request.get('/api/vocab')).json()) as {
+    entries: { term: string; sentence: string }[];
+  };
+  expect(entries).toEqual([
+    expect.objectContaining({
+      term: 'ephemeral',
+      sentence: 'The river moved slowly under a pale and ephemeral light.',
+    }),
+  ]);
 });

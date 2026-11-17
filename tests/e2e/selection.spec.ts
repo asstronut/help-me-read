@@ -152,6 +152,27 @@ test('a selection across a page break belongs to the page it starts on', async (
   }
 });
 
+test('a word hyphenated across lines reads as extraction joins it', async ({ page }) => {
+  await openPdf(page);
+  // The text layer has `ephem-` and `eral` on two lines with a <br> between; the search
+  // reads the text nodes without it.
+  await selectPdfText(
+    page,
+    { pageNumber: 1, text: 'pale and ephem-eral light', edge: 'start' },
+    { pageNumber: 1, text: 'pale and ephem-eral light', edge: 'end' },
+  );
+  await expect(menu(page)).toBeVisible();
+  expect((await currentSelection(page))?.text).toBe('pale and ephemeral light');
+
+  await selectPdfText(
+    page,
+    { pageNumber: 1, text: 'eral light.', edge: 'start' },
+    { pageNumber: 1, text: 'eral light.', edge: 'end' },
+  );
+  await expect.poll(async () => (await currentSelection(page))?.text).toBe('eral light.');
+  expect((await currentSelection(page))?.prefix.endsWith('pale and ephem')).toBe(true);
+});
+
 test('the prefix tells a repeated sentence apart', async ({ page }) => {
   await openPdf(page);
   await selectPdfText(
