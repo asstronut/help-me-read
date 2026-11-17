@@ -11,6 +11,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from 'react';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { currentPdfItem, pdfContents, type ContentsItem } from '@/lib/reader/contents';
@@ -164,6 +165,7 @@ export default function PdfReader({
   // The pages' column, inside its padding: the room a fitted page has.
   const [container, setContainer] = useState({ width: 0, height: 0 });
   const [error, setError] = useState(false);
+  const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
   const { save, status } = usePositionSaver(bookId);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pageRef = useRef(page);
@@ -312,10 +314,13 @@ export default function PdfReader({
   }
   const ready = numPages > 0 && aspect > 0 && pageWidth > 0;
 
-  // Keep the current page in view when the layout first appears and whenever page sizes change.
+  // Keep the current page in view when the layout first appears, whenever page sizes change, and
+  // whenever the PDF is loaded again. Cache Components keeps the reader mounted but hidden while the
+  // library shows, and the Document drops its PDF then; on the way back the pages are drawn anew
+  // (twice when the book's link has changed meanwhile), while the reader is still `ready`.
   useLayoutEffect(() => {
     if (ready) scrollToPage(pageRef.current);
-  }, [ready, pageWidth, scrollToPage]);
+  }, [ready, pageWidth, pdfDoc, scrollToPage]);
 
   useEffect(() => {
     const scroller = scrollRef.current;
@@ -383,6 +388,7 @@ export default function PdfReader({
               loading={<p className="p-4 text-sm opacity-70">Loading…</p>}
               error=""
               onLoadSuccess={(doc) => {
+                setPdfDoc(doc);
                 void pdfContents(doc).then((items) => {
                 setContents(items);
                 onContents(items);

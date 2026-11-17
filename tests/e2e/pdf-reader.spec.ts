@@ -64,6 +64,24 @@ test('the toolbar moves between pages and the reader returns to the saved page',
   await expect(pageInput(page)).toHaveValue('1');
 });
 
+test('going back to the library and opening the book again shows the page it was left on', async ({ page }) => {
+  await addSamplePdf(page, CONTENTS_PDF);
+  await page.goto('/library');
+  await page.getByRole('link', { name: 'Sample Book' }).click();
+  await pageInput(page).fill('4');
+  await pageInput(page).press('Enter');
+  await expect(currentPage(page)).toHaveAttribute('data-page-number', '4');
+
+  // The reader stays mounted, hidden, while the library shows, and its PDF is reloaded on the way back.
+  for (let visit = 0; visit < 3; visit++) {
+    await page.getByRole('link', { name: 'Library' }).click();
+    await page.getByRole('link', { name: 'Sample Book' }).first().click();
+    await expect(pageInput(page)).toHaveValue('4');
+    await expect(page.locator('[data-slot="4"] canvas')).toBeInViewport({ ratio: 0.5 });
+  }
+  await expect(page.getByRole('alert').filter({ hasText: 'Could not open this PDF.' })).toHaveCount(0);
+});
+
 test('typing a page number jumps to it', async ({ page }) => {
   const id = await addSamplePdf(page);
   await page.goto(`/read/${id}`);
