@@ -20,6 +20,8 @@ export type HighlightColor = 'yellow' | 'green' | 'blue' | 'pink';
 export type Theme = 'light' | 'dark' | 'sepia';
 
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+/** The longest title a reader can give a Book when renaming it. */
+export const MAX_TITLE_CHARS = 300;
 export const ACCEPTED_EXTENSIONS = ['.pdf', '.epub'] as const;
 export const MAX_SELECTION_WORDS = 2000;
 export const EPUB_CONTEXT_WORDS = 400;
