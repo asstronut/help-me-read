@@ -11,10 +11,21 @@ import {
   type MouseEvent,
   type ReactNode,
 } from 'react';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { currentPdfItem, pdfContents, type ContentsItem } from '@/lib/reader/contents';
 import { listenForPageKeys, type PageTurn } from '@/lib/reader/page-keys';
+import {
+  NO_CROP,
+  detectCrop,
+  inkBoxOfCanvas,
+  placeInSlot,
+  saveCrop,
+  savedCrop,
+  sticksOut,
+  type CropBox,
+} from '@/lib/reader/pdf-crop';
 import { isWholePage } from '@/lib/reader/pdf-motion';
 import { CSS_PX_PER_POINT, zoomStep } from '@/lib/reader/pdf-zoom';
 import { PREFS, usePref, type PdfFit } from '@/lib/reader/reading-prefs';
@@ -61,6 +72,10 @@ type Props = {
 
 // Pages this far from the current one are always drawn: after a jump, `page` is ahead of the observer.
 const RENDER_AROUND = 1;
+// A page is shaped unlike the book's first when their height / width differ by more than this share.
+const ODD_SHAPE = 0.01;
+// The longest the pages wait for the book's box on its first open with Crop white margins; then they show uncropped.
+const CROP_WAIT_MS = 1500;
 
 /** The page taking up the most of the visible area. */
 function mostVisiblePage(container: HTMLElement): number | null {
@@ -96,8 +111,13 @@ type SlotProps = {
   n: number;
   current: boolean;
   drawn: boolean;
+  /** The size of the book's usual page, drawn whole. */
   width: number;
   height: number;
+  /** The part of the page the slot shows ("Crop white margins"); null shows all of it. */
+  crop: CropBox | null;
+  /** Set for a page the crop would cut, to its own height / width: it is shown whole inside the slot. */
+  ownAspect: number | null;
   highlights: HighlightView[];
   onDrawn: (n: number) => void;
 };
@@ -105,28 +125,50 @@ type SlotProps = {
 /**
  * One page's place in the column. Memoized, as scrolling onto a new page changes the props of only
  * the few slots around it, and a book can have hundreds.
+ *
+ * With a crop the slot is a window onto the page: it has the box's size and clips, and the page is
+ * drawn whole and moved so the window shows the box. The page element keeps the whole page's size,
+ * so highlights and selections (fractions of the page) mean the same with and without a crop.
  */
-const PdfPageSlot = memo(function PdfPageSlot({ n, current, drawn, width, height, highlights, onDrawn }: SlotProps) {
+const PdfPageSlot = memo(function PdfPageSlot({
+  n,
+  current,
+  drawn,
+  width,
+  height,
+  crop,
+  ownAspect,
+  highlights,
+  onDrawn,
+}: SlotProps) {
+  const place = crop && placeInSlot(width, height, crop, ownAspect);
   return (
     <div
       data-slot={n}
       aria-current={current ? 'page' : undefined}
-      // Paper only while nothing is drawn: a page shaped unlike the first would otherwise look as big as its slot.
-      className="not-has-[canvas]:bg-(--pdf-paper)"
-      style={{ width, minHeight: height }}
+      className={
+        crop
+          ? 'overflow-clip bg-(--pdf-paper)'
+          : // Paper only while nothing is drawn: a page shaped unlike the first would otherwise look as big as its slot.
+            'not-has-[canvas]:bg-(--pdf-paper)'
+      }
+      style={crop ? { width: width * (crop.r - crop.l), height: height * (crop.b - crop.t) } : { width, minHeight: height }}
     >
       {drawn && (
-        <Page
-          pageNumber={n}
-          width={width}
-          // react-pdf paints the page white inline, which would flash white in Dark.
-          className="bg-(--pdf-paper)!"
-          loading=""
-          renderAnnotationLayer={false}
-          onRenderSuccess={() => onDrawn(n)}
-        >
-          <PdfHighlightLayer highlights={highlights} />
-        </Page>
+        // Always here, so switching the crop moves the page without drawing it again from nothing.
+        <div style={place ? { width: place.width, marginLeft: place.left, marginTop: place.top } : undefined}>
+          <Page
+            pageNumber={n}
+            width={place ? place.width : width}
+            // react-pdf paints the page white inline, which would flash white in Dark.
+            className="bg-(--pdf-paper)!"
+            loading=""
+            renderAnnotationLayer={false}
+            onRenderSuccess={() => onDrawn(n)}
+          >
+            <PdfHighlightLayer highlights={highlights} />
+          </Page>
+        </div>
       )}
     </div>
   );
@@ -161,18 +203,73 @@ export default function PdfReader({
   // A zoom picked with − and +, as a share of the real size; null while the page is fitted.
   const [zoom, setZoom] = useState<number | null>(null);
   const [keepColours, setKeepColours] = usePref(PREFS.keepPdfColours);
+  const [cropMargins, setCropMargins] = usePref(PREFS.cropPdfMargins);
+  // The box that holds the book's content; null until it is found. `NO_CROP` for a book not worth cropping.
+  // A box found on an earlier visit is used at once.
+  const [bookCrop, setBookCrop] = useState<CropBox | null>(() => savedCrop(bookId));
+  // With the option on, the pages wait for the box so they do not change size just after they appear;
+  // they wait no longer than CROP_WAIT_MS, and once they have appeared they are never hidden again.
+  const [cropWaitOver, setCropWaitOver] = useState(false);
+  const holdForCrop = cropMargins && bookCrop === null && !cropWaitOver;
+  // The pages the crop would cut, each with its own height / width: they are shown whole.
+  const [wholePages, setWholePages] = useState<ReadonlyMap<number, number>>(() => new Map());
+  const crop = cropMargins && bookCrop && bookCrop !== NO_CROP ? bookCrop : null;
   // The pages' column, inside its padding: the room a fitted page has.
   const [container, setContainer] = useState({ width: 0, height: 0 });
   const [error, setError] = useState(false);
+  const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
   const { save, status } = usePositionSaver(bookId);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pageRef = useRef(page);
   const lastReleaseWasTap = useRef(false);
   const onSelectionRef = useRef(onSelection);
+  const cropRef = useRef(crop);
+  const aspectRef = useRef(aspect);
   useEffect(() => {
     pageRef.current = page;
     onSelectionRef.current = onSelection;
+    cropRef.current = crop;
+    aspectRef.current = aspect;
   });
+
+  // Whole page: one page fills the column's height exactly, so no other page shows beside it.
+  // With a crop the box is what gets fitted, so the page itself is drawn wider than the column.
+  const boxShare = crop ? crop.r - crop.l : 1;
+  const boxAspect = crop ? (aspect * (crop.b - crop.t)) / boxShare : aspect;
+  const fitted =
+    fit === 'page' && aspect > 0 ? Math.min(container.width, Math.floor(container.height / boxAspect)) : container.width;
+  // The width the whole page is drawn at, so the zoom percentage is the page's real scale with a crop too.
+  const pageWidth = zoom === null ? fitted / boxShare : realWidth * zoom;
+  const scale = realWidth > 0 ? pageWidth / realWidth : 0;
+  const zoomIn = zoomStep(scale, 1);
+  const zoomOut = zoomStep(scale, -1);
+  const ready = numPages > 0 && aspect > 0 && pageWidth > 0 && !holdForCrop;
+  // Once the pages have appeared, they stay: turning the option on later only changes their size.
+  if (ready && !cropWaitOver) setCropWaitOver(true);
+
+  // Finds the book's box the first time the option is on, and remembers it for the next visit.
+  useEffect(() => {
+    if (!cropMargins || !pdfDoc || bookCrop) return;
+    let cancelled = false;
+    const stopWaiting = () => setCropWaitOver(true);
+    const timer = window.setTimeout(stopWaiting, CROP_WAIT_MS);
+    void detectCrop(pdfDoc, () => cancelled).then(
+      (box) => {
+        if (cancelled) return;
+        if (!box) return stopWaiting();
+        setBookCrop(box);
+        saveCrop(bookId, box);
+      },
+      // A book that cannot be scanned is shown as it always was.
+      () => {
+        if (!cancelled) stopWaiting();
+      },
+    );
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [cropMargins, pdfDoc, bookCrop, bookId]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -222,7 +319,8 @@ export default function PdfReader({
     scrollRef.current?.querySelector(`[data-slot="${target}"]`)?.scrollIntoView({ block: 'start' });
   }, []);
 
-  const clampPage = (n: number) => Math.min(Math.max(n, 1), Math.max(numPages, 1));
+  // Before the PDF has loaded its length is unknown: a page typed then is kept, and capped once it loads.
+  const clampPage = (n: number) => (numPages > 0 ? Math.min(Math.max(n, 1), numPages) : Math.max(n, 1));
 
   /**
    * Goes to the page; with `y` (0 to 1 down the page), scrolls that point a third of the way down
@@ -234,8 +332,14 @@ export default function PdfReader({
     setPage(next);
     const scroller = scrollRef.current;
     const slot = scroller?.querySelector<HTMLElement>(`[data-slot="${next}"]`);
-    if (y === undefined || isWholePage(fit, zoom) || !scroller || !slot) scrollToPage(next);
-    else scroller.scrollTop = slot.offsetTop + y * slot.offsetHeight - scroller.clientHeight / 3;
+    if (y === undefined || isWholePage(fit, zoom) || !scroller || !slot) {
+      scrollToPage(next);
+      return;
+    }
+    // `y` is a share of the whole page; with a crop the slot shows only a part of the page.
+    const place = crop && placeInSlot(pageWidth, pageWidth * aspect, crop, wholePages.get(next) ?? null);
+    const down = place ? place.top + y * place.height : y * slot.offsetHeight;
+    scroller.scrollTop = slot.offsetTop + down - scroller.clientHeight / 3;
   }
   /** Turns one page, gliding there. The page number goes first, so a press during the glide starts from the new page. */
   function turn(dir: PageTurn) {
@@ -281,6 +385,26 @@ export default function PdfReader({
   }
 
   /**
+   * With a crop: marks a drawn page to be shown whole when the book's box would cut it, as its
+   * content passes the box (a cover, a stamp in the margin) or it is shaped unlike the first page
+   * (another size, or turned), which the box and the slot were not measured for.
+   */
+  const checkCrop = useCallback((canvas: HTMLCanvasElement, pageNumber: number, box: CropBox) => {
+    if (canvas.width === 0 || canvas.height === 0) return;
+    const ownAspect = canvas.height / canvas.width;
+    const cut = Math.abs(ownAspect / aspectRef.current - 1) > ODD_SHAPE || sticksOut(inkBoxOfCanvas(canvas) ?? box, box);
+    if (cut) setWholePages((pages) => (pages.has(pageNumber) ? pages : new Map(pages).set(pageNumber, ownAspect)));
+  }, []);
+
+  // The pages drawn before the crop came on were not checked against it.
+  useEffect(() => {
+    if (!crop) return;
+    for (const canvas of scrollRef.current?.querySelectorAll<HTMLCanvasElement>('[data-slot] canvas') ?? []) {
+      checkCrop(canvas, Number(canvas.closest<HTMLElement>('[data-slot]')?.dataset.slot), crop);
+    }
+  }, [crop, checkCrop]);
+
+  /**
    * Shows a drawn page's canvas at exactly its pixel size. react-pdf rounds the canvas's pixels and
    * its size on screen separately, so they can differ by up to a pixel; the browser then stretches
    * the picture to fit, which blurs the text.
@@ -290,7 +414,8 @@ export default function PdfReader({
     if (!canvas) return;
     canvas.style.width = `${canvas.width / window.devicePixelRatio}px`;
     canvas.style.height = `${canvas.height / window.devicePixelRatio}px`;
-  }, []);
+    if (cropRef.current) checkCrop(canvas, pageNumber, cropRef.current);
+  }, [checkCrop]);
   const byPage = useMemo(() => highlightsByPage(highlights), [highlights]);
 
   function onScroll() {
@@ -298,24 +423,18 @@ export default function PdfReader({
     if (motion.scrolled() !== 'glide') followView();
   }
 
-  // Whole page: one page fills the column's height exactly, so no other page shows beside it.
-  const fitted =
-    fit === 'page' && aspect > 0 ? Math.min(container.width, Math.floor(container.height / aspect)) : container.width;
-  const pageWidth = zoom === null ? fitted : realWidth * zoom;
-  const scale = realWidth > 0 ? pageWidth / realWidth : 0;
-  const zoomIn = zoomStep(scale, 1);
-  const zoomOut = zoomStep(scale, -1);
-
   function chooseFit(next: PdfFit) {
     setFit(next);
     setZoom(null);
   }
-  const ready = numPages > 0 && aspect > 0 && pageWidth > 0;
 
-  // Keep the current page in view when the layout first appears and whenever page sizes change.
+  // Keep the current page in view when the layout first appears, whenever page sizes change, and
+  // whenever the PDF is loaded again. Cache Components keeps the reader mounted but hidden while the
+  // library shows, and the Document drops its PDF then; on the way back the pages are drawn anew
+  // (twice when the book's link has changed meanwhile), while the reader is still `ready`.
   useLayoutEffect(() => {
     if (ready) scrollToPage(pageRef.current);
-  }, [ready, pageWidth, scrollToPage]);
+  }, [ready, pageWidth, crop, pdfDoc, scrollToPage]);
 
   useEffect(() => {
     const scroller = scrollRef.current;
@@ -356,7 +475,14 @@ export default function PdfReader({
         onHighlights={onHighlights}
       >
         <ReadingSettings>
-          <PdfOptions fit={fit} onFit={chooseFit} keepColours={keepColours} onKeepColours={setKeepColours} />
+          <PdfOptions
+            fit={fit}
+            onFit={chooseFit}
+            keepColours={keepColours}
+            onKeepColours={setKeepColours}
+            cropMargins={cropMargins}
+            onCropMargins={setCropMargins}
+          />
           {languageOptions}
         </ReadingSettings>
       </ReaderTopBar>
@@ -383,6 +509,7 @@ export default function PdfReader({
               loading={<p className="p-4 text-sm opacity-70">Loading…</p>}
               error=""
               onLoadSuccess={(doc) => {
+                setPdfDoc(doc);
                 void pdfContents(doc).then((items) => {
                 setContents(items);
                 onContents(items);
@@ -392,11 +519,13 @@ export default function PdfReader({
                   setAspect(height / width);
                   setRealWidth(width * CSS_PX_PER_POINT);
                   setNumPages(doc.numPages);
+                  pageRef.current = Math.min(pageRef.current, doc.numPages);
                   setPage((p) => Math.min(p, doc.numPages));
                 }, () => setError(true));
               }}
               onLoadError={() => setError(true)}
             >
+              {!ready && !error && <p className="p-4 text-sm opacity-70">Loading…</p>}
               {ready && (
                 <div className="mx-auto flex w-fit flex-col gap-2">
                   {Array.from({ length: numPages }, (_, i) => i + 1).map((n) => (
@@ -407,6 +536,8 @@ export default function PdfReader({
                       drawn={near.has(n) || Math.abs(n - page) <= RENDER_AROUND}
                       width={pageWidth}
                       height={pageWidth * aspect}
+                      crop={crop}
+                      ownAspect={crop ? (wholePages.get(n) ?? null) : null}
                       highlights={byPage.get(n) ?? NO_HIGHLIGHTS}
                       onDrawn={showAtPixelSize}
                     />

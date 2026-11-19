@@ -256,24 +256,34 @@ type PdfProps = {
   onFit: (fit: PdfFit) => void;
   keepColours: boolean;
   onKeepColours: (keep: boolean) => void;
+  cropMargins: boolean;
+  onCropMargins: (crop: boolean) => void;
 };
 
-/** A PDF's options: the page is drawn as it is, so only how it fits and its colours in Dark. */
-export function PdfOptions({ fit, onFit, keepColours, onKeepColours }: PdfProps) {
+/** A row with an option's name and its checkbox; the whole row is the 44px target. */
+function CheckRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-sm">
+      <span>{label}</span>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="size-[18px] cursor-pointer accent-ink"
+      />
+    </label>
+  );
+}
+
+/** A PDF's options: the page is drawn as it is, so only how it fits, its colours in Dark and its margins. */
+export function PdfOptions({ fit, onFit, keepColours, onKeepColours, cropMargins, onCropMargins }: PdfProps) {
   return (
     <>
       <Row caption="Fit">
         <SegmentedControl label="Page fit" options={FIT_OPTIONS} value={fit} onChange={onFit} className="flex-1" />
       </Row>
-      <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-sm">
-        <span>Keep PDF colours in Dark</span>
-        <input
-          type="checkbox"
-          checked={keepColours}
-          onChange={(e) => onKeepColours(e.target.checked)}
-          className="size-[18px] cursor-pointer accent-ink"
-        />
-      </label>
+      <CheckRow label="Keep PDF colours in Dark" checked={keepColours} onChange={onKeepColours} />
+      <CheckRow label="Crop white margins" checked={cropMargins} onChange={onCropMargins} />
       <p className="text-xs leading-normal text-muted">
         A PDF keeps its own font and layout. For font and spacing options, read an EPUB.
       </p>
