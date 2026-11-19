@@ -16,7 +16,16 @@ import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { currentPdfItem, pdfContents, type ContentsItem } from '@/lib/reader/contents';
 import { listenForPageKeys, type PageTurn } from '@/lib/reader/page-keys';
-import { NO_CROP, detectCrop, inkBoxOfCanvas, placeInSlot, sticksOut, type CropBox } from '@/lib/reader/pdf-crop';
+import {
+  NO_CROP,
+  detectCrop,
+  inkBoxOfCanvas,
+  placeInSlot,
+  saveCrop,
+  savedCrop,
+  sticksOut,
+  type CropBox,
+} from '@/lib/reader/pdf-crop';
 import { isWholePage } from '@/lib/reader/pdf-motion';
 import { CSS_PX_PER_POINT, zoomStep } from '@/lib/reader/pdf-zoom';
 import { PREFS, usePref, type PdfFit } from '@/lib/reader/reading-prefs';
@@ -65,6 +74,8 @@ type Props = {
 const RENDER_AROUND = 1;
 // A page is shaped unlike the book's first when their height / width differ by more than this share.
 const ODD_SHAPE = 0.01;
+// The longest the pages wait for the book's box on its first open with Crop white margins; then they show uncropped.
+const CROP_WAIT_MS = 1500;
 
 /** The page taking up the most of the visible area. */
 function mostVisiblePage(container: HTMLElement): number | null {
@@ -194,7 +205,12 @@ export default function PdfReader({
   const [keepColours, setKeepColours] = usePref(PREFS.keepPdfColours);
   const [cropMargins, setCropMargins] = usePref(PREFS.cropPdfMargins);
   // The box that holds the book's content; null until it is found. `NO_CROP` for a book not worth cropping.
-  const [bookCrop, setBookCrop] = useState<CropBox | null>(null);
+  // A box found on an earlier visit is used at once.
+  const [bookCrop, setBookCrop] = useState<CropBox | null>(() => savedCrop(bookId));
+  // With the option on, the pages wait for the box so they do not change size just after they appear;
+  // they wait no longer than CROP_WAIT_MS, and once they have appeared they are never hidden again.
+  const [cropWaitOver, setCropWaitOver] = useState(false);
+  const holdForCrop = cropMargins && bookCrop === null && !cropWaitOver;
   // The pages the crop would cut, each with its own height / width: they are shown whole.
   const [wholePages, setWholePages] = useState<ReadonlyMap<number, number>>(() => new Map());
   const crop = cropMargins && bookCrop && bookCrop !== NO_CROP ? bookCrop : null;
@@ -227,23 +243,33 @@ export default function PdfReader({
   const scale = realWidth > 0 ? pageWidth / realWidth : 0;
   const zoomIn = zoomStep(scale, 1);
   const zoomOut = zoomStep(scale, -1);
-  const ready = numPages > 0 && aspect > 0 && pageWidth > 0;
+  const ready = numPages > 0 && aspect > 0 && pageWidth > 0 && !holdForCrop;
+  // Once the pages have appeared, they stay: turning the option on later only changes their size.
+  if (ready && !cropWaitOver) setCropWaitOver(true);
 
-  // Finds the book's box the first time the option is on.
+  // Finds the book's box the first time the option is on, and remembers it for the next visit.
   useEffect(() => {
     if (!cropMargins || !pdfDoc || bookCrop) return;
     let cancelled = false;
+    const stopWaiting = () => setCropWaitOver(true);
+    const timer = window.setTimeout(stopWaiting, CROP_WAIT_MS);
     void detectCrop(pdfDoc, () => cancelled).then(
       (box) => {
-        if (box && !cancelled) setBookCrop(box);
+        if (cancelled) return;
+        if (!box) return stopWaiting();
+        setBookCrop(box);
+        saveCrop(bookId, box);
       },
       // A book that cannot be scanned is shown as it always was.
-      () => undefined,
+      () => {
+        if (!cancelled) stopWaiting();
+      },
     );
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
-  }, [cropMargins, pdfDoc, bookCrop]);
+  }, [cropMargins, pdfDoc, bookCrop, bookId]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -499,6 +525,7 @@ export default function PdfReader({
               }}
               onLoadError={() => setError(true)}
             >
+              {!ready && !error && <p className="p-4 text-sm opacity-70">Loading…</p>}
               {ready && (
                 <div className="mx-auto flex w-fit flex-col gap-2">
                   {Array.from({ length: numPages }, (_, i) => i + 1).map((n) => (

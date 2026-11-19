@@ -1,5 +1,15 @@
 import { expect, test } from 'vitest';
-import { NO_CROP, bookBox, inkBox, placeInSlot, samplePages, sticksOut, type CropBox } from '../../src/lib/reader/pdf-crop';
+import {
+  NO_CROP,
+  bookBox,
+  inkBox,
+  parseCrop,
+  placeInSlot,
+  samplePages,
+  serializeCrop,
+  sticksOut,
+  type CropBox,
+} from '../../src/lib/reader/pdf-crop';
 
 // The size a page is scanned at: about 400px wide.
 const W = 400;
@@ -147,4 +157,21 @@ test('a page shown whole is made as big as fits in the slot, in its middle', () 
   expect(placeInSlot(1000, 1500, WINDOW, 3)).toEqual(closeTo({ width: 400, height: 1200, left: 100, top: 0 }));
   // A page lying on its side.
   expect(placeInSlot(1000, 1500, WINDOW, 0.5)).toEqual(closeTo({ width: 600, height: 300, left: 0, top: 450 }));
+});
+
+test('a stored box reads back as the same box, and "not worth cropping" as NO_CROP itself', () => {
+  expect(parseCrop(serializeCrop(TEXT_BOX))).toEqual(TEXT_BOX);
+  expect(parseCrop(serializeCrop(NO_CROP))).toBe(NO_CROP);
+});
+
+test('nothing stored, a damaged value or one from another version of the detection is not used', () => {
+  expect(parseCrop(null)).toBeNull();
+  expect(parseCrop('')).toBeNull();
+  expect(parseCrop('{not json')).toBeNull();
+  expect(parseCrop(JSON.stringify({ box: TEXT_BOX }))).toBeNull();
+  expect(parseCrop(JSON.stringify({ v: 999, box: TEXT_BOX }))).toBeNull();
+  expect(parseCrop(JSON.stringify({ v: 1 }))).toBeNull();
+  expect(parseCrop(JSON.stringify({ v: 1, box: { l: 0.1, t: 0.1, r: 1.2, b: 0.8 } }))).toBeNull();
+  expect(parseCrop(JSON.stringify({ v: 1, box: { l: 0.8, t: 0.1, r: 0.2, b: 0.8 } }))).toBeNull();
+  expect(parseCrop(JSON.stringify({ v: 1, box: { l: '0.1', t: 0.1, r: 0.8, b: 0.8 } }))).toBeNull();
 });

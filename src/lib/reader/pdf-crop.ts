@@ -194,3 +194,45 @@ export async function detectCrop<Viewport extends { width: number; height: numbe
   }
   return isCancelled() ? null : bookBox(boxes);
 }
+
+// Bump when the detection changes, so boxes found the old way are found again.
+const SAVED_VERSION = 1;
+const savedKey = (bookId: string) => `hmr.pdfCrop.${bookId}`;
+const isShare = (n: unknown): n is number => typeof n === 'number' && n >= 0 && n <= 1;
+
+/** A book's box as it is stored: `NO_CROP` is stored as "not worth cropping", so it is not looked for again. */
+export function serializeCrop(box: CropBox): string {
+  return JSON.stringify({ v: SAVED_VERSION, box: box === NO_CROP ? null : box });
+}
+
+/** The box stored by `serializeCrop`, or null when nothing usable is stored (missing, damaged, or from an older detection). */
+export function parseCrop(stored: string | null): CropBox | null {
+  if (!stored) return null;
+  try {
+    const { v, box } = JSON.parse(stored) as { v?: unknown; box?: Partial<CropBox> | null };
+    if (v !== SAVED_VERSION || box === undefined) return null;
+    if (box === null) return NO_CROP;
+    const { l, t, r, b } = box;
+    return isShare(l) && isShare(t) && isShare(r) && isShare(b) && l < r && t < b ? { l, t, r, b } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The box found for the book on this device before, or null. Kept in localStorage, like the reading preferences. */
+export function savedCrop(bookId: string): CropBox | null {
+  try {
+    return parseCrop(localStorage.getItem(savedKey(bookId)));
+  } catch {
+    return null;
+  }
+}
+
+/** Remembers the book's box on this device, so the next open needs no detection. */
+export function saveCrop(bookId: string, box: CropBox): void {
+  try {
+    localStorage.setItem(savedKey(bookId), serializeCrop(box));
+  } catch {
+    // the box is just found again next time
+  }
+}
