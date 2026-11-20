@@ -97,6 +97,16 @@
   --font-hyperlegible: var(--font-atkinson), system-ui, sans-serif;
 }
 
+/*
+ * Motion curves. ease-out is a strong ease-out for things entering and leaving (it replaces
+ * Tailwind's weaker default of the same name, which nothing used); ease-drawer is the
+ * iOS-like curve for sheets.
+ */
+@theme {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
 body {
   background: var(--bg);
   color: var(--ink);
@@ -122,6 +132,115 @@ body {
   transition-property: color, background-color, border-color, opacity, scale;
   transition-duration: 150ms, 150ms, 150ms, 150ms, 160ms;
   transition-timing-function: ease, ease, ease, ease, cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/*
+ * A popover that eases open and shut (Reading settings). Closing animates too: `display` and
+ * `overlay` switch only at the end of the transition (allow-discrete), so it stays drawn while
+ * it leaves. A transition takes the timing of the state it heads to, so the closed state
+ * carries the exit timing and :popover-open the entry timing.
+ *   Phone: a bottom sheet that slides up on the drawer curve, solid the whole way; the backdrop fades.
+ *   sm and up: a card that grows from 97% out of its top-right corner, under the Aa button.
+ *   Reduced motion: it fades, nothing moves.
+ * While closing it ignores the pointer, so a tap right after Escape reaches the book.
+ */
+@utility popover-motion {
+  transform: translateY(100%);
+  pointer-events: none;
+  transition:
+    transform 250ms var(--ease-drawer),
+    display 250ms allow-discrete,
+    overlay 250ms allow-discrete;
+
+  &:popover-open {
+    transform: none;
+    pointer-events: auto;
+    transition:
+      transform 400ms var(--ease-drawer),
+      display 400ms allow-discrete,
+      overlay 400ms allow-discrete;
+
+    @starting-style {
+      transform: translateY(100%);
+    }
+  }
+
+  &::backdrop {
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      opacity 250ms var(--ease-drawer),
+      display 250ms allow-discrete,
+      overlay 250ms allow-discrete;
+  }
+
+  &:popover-open::backdrop {
+    opacity: 1;
+    pointer-events: auto;
+    transition:
+      opacity 400ms var(--ease-drawer),
+      display 400ms allow-discrete,
+      overlay 400ms allow-discrete;
+
+    @starting-style {
+      opacity: 0;
+    }
+  }
+
+  @media (width >= 40rem) {
+    opacity: 0;
+    transform: scale(0.97);
+    transform-origin: top right;
+    transition:
+      opacity 120ms var(--ease-out),
+      transform 120ms var(--ease-out),
+      display 120ms allow-discrete,
+      overlay 120ms allow-discrete;
+
+    &:popover-open {
+      opacity: 1;
+      transform: none;
+      transition:
+        opacity 180ms var(--ease-out),
+        transform 180ms var(--ease-out),
+        display 180ms allow-discrete,
+        overlay 180ms allow-discrete;
+
+      @starting-style {
+        opacity: 0;
+        transform: scale(0.97);
+      }
+    }
+
+    /* The backdrop is transparent at this width: nothing to fade. */
+    &::backdrop,
+    &:popover-open::backdrop {
+      transition: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    opacity: 0;
+    transform: none;
+    transition:
+      opacity 150ms var(--ease-out),
+      display 150ms allow-discrete,
+      overlay 150ms allow-discrete;
+
+    &:popover-open {
+      opacity: 1;
+      transform: none;
+      transition:
+        opacity 200ms var(--ease-out),
+        display 200ms allow-discrete,
+        overlay 200ms allow-discrete;
+
+      @starting-style {
+        opacity: 0;
+        transform: none;
+      }
+    }
+  }
 }
 
 /* A scrolling area inside the reader: a thin bar in the theme's colours, with no track or arrows. */
