@@ -59,7 +59,7 @@ export function NoteEditor({ highlight, onSaved, onDeleted, onClose }: Props) {
       role="dialog"
       aria-label="Note"
       onSubmit={save}
-      className="fixed inset-x-0 bottom-0 z-50 flex flex-col gap-3 rounded-t-2xl border-t border-rule bg-surface px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] font-sans text-sm text-ink shadow-[0_-8px_24px_var(--shadow)] sm:inset-x-auto sm:right-4 sm:bottom-4 sm:w-80 sm:rounded-2xl sm:border sm:pb-3 sm:shadow-[0_8px_24px_var(--shadow)]"
+      className="motion-rise fixed inset-x-0 bottom-0 z-50 flex flex-col gap-3 rounded-t-2xl border-t border-rule bg-surface px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] font-sans text-sm text-ink shadow-[0_-8px_24px_var(--shadow)] sm:inset-x-auto sm:right-4 sm:bottom-4 sm:w-80 sm:rounded-2xl sm:border sm:pb-3 sm:shadow-[0_8px_24px_var(--shadow)]"
     >
       <div className="flex items-center justify-between">
         <span aria-hidden="true" className="text-[11px] tracking-[0.1em] text-muted uppercase">

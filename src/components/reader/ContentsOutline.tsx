@@ -6,8 +6,6 @@ import { cn } from '@/components/ui/cn';
 import { ChevronRightIcon, MenuIcon } from '@/components/ui/icons';
 import { usePresence } from '@/components/ui/usePresence';
 import { findItem, type ContentsItem } from '@/lib/reader/contents';
-import { PREFS, usePref } from '@/lib/reader/reading-prefs';
-import { TOUCH, WIDE, useMediaQuery } from './useMediaQuery';
 
 type Props = {
   /** The book's contents; null while they are being read. */
@@ -22,23 +20,16 @@ type Props = {
 
 type OutlineProps = Props & {
   /**
-   * `rail`: in the column beside the book (see ContentsRail). `bar`: the ☰ button in the top bar
-   * (a phone), opening the list over the book.
+   * `rail`: in the column beside the book (see ContentsRail), with the chapter ticks under the ☰
+   * button. `bar`: the ☰ button in the top bar (a phone).
    */
   placement: 'rail' | 'bar';
-  /** The rail has room to stay open beside the book; when false the list opens over the book. */
-  docked?: boolean;
-  /** The rail is open (when docked), and the button that opens and closes it. */
-  railOpen?: boolean;
-  onRailToggle?: () => void;
 };
 
-/** The rail's width when open (the ☰ button alone is 44px). */
-export const RAIL_WIDTH = 216;
+/** The rail's width: the ☰ button, with the chapter ticks under it. */
+export const RAIL_WIDTH = 44;
 
 type RailProps = Props & {
-  /** False while a side panel is open: the rail then folds to its ☰ button. */
-  roomBeside: boolean;
   /** Where the ☰ button's box starts, from the top of the column (may be negative), to line it up with the text. */
   top: number;
   /** The book. */
@@ -53,13 +44,13 @@ type RailProps = Props & {
 };
 
 /**
- * The book with its contents rail on the left: open (216px) when the window is wide and no side
- * panel needs the room, else just the ☰ button (44px). Whether it is open is remembered. The same
- * width is kept free on the right, so the book stays centred, unless `balanced` is off. On a phone there is no rail (the ☰ button is in the top bar). On a
- * tablet it is just the ☰ button too, so a page held sideways has room for two columns.
+ * The book with its contents rail on the left: the ☰ button, which opens the list as a card over
+ * the book, and under it a tick for each chapter that shows where you are in the book. The rail
+ * keeps its width whatever else is open, so the book never shifts. The same width is kept free on
+ * the right, so the book stays centred, unless `balanced` is off. On a phone there is no rail (the
+ * ☰ button is in the top bar).
  */
 export function ContentsRail({
-  roomBeside,
   top,
   children,
   className,
@@ -67,24 +58,16 @@ export function ContentsRail({
   balanced = true,
   ...props
 }: RailProps) {
-  const wide = useMediaQuery(WIDE);
-  const touch = useMediaQuery(TOUCH);
-  const docked = wide && !touch && roomBeside;
-  const [railOpen, setRailOpen] = usePref(PREFS.contentsOpen);
-  const width = docked && railOpen ? RAIL_WIDTH : 44;
   return (
     <div className={cn('flex min-h-0 flex-1', balanced ? 'sm:px-7' : 'sm:pl-7', className)}>
       <ContentsOutline
         {...props}
         placement="rail"
-        docked={docked}
-        railOpen={railOpen}
-        onRailToggle={() => setRailOpen(!railOpen)}
         className={cn('hidden sm:flex', outlineClassName)}
-        style={{ width, marginTop: top }}
+        style={{ width: RAIL_WIDTH, marginTop: top }}
       />
       <div className="flex min-w-0 flex-1">{children}</div>
-      {balanced && <div aria-hidden="true" className="hidden sm:block" style={{ flex: `0 1 ${width}px` }} />}
+      {balanced && <div aria-hidden="true" className="hidden sm:block" style={{ flex: `0 1 ${RAIL_WIDTH}px` }} />}
     </div>
   );
 }
@@ -96,34 +79,30 @@ export function ContentsOutline({
   onGo,
   emptyText,
   placement,
-  docked = false,
-  railOpen = false,
-  onRailToggle,
   className,
   style,
 }: OutlineProps & { style?: CSSProperties }) {
-  // The list over the book starts closed.
-  const [floatOpen, setFloatOpen] = useState(false);
-  const open = docked ? railOpen : floatOpen;
-  // The card over the book stays a moment after closing, to lift back toward the button and fade.
-  const floating = usePresence(!docked && floatOpen, FLOAT_EXIT_MS);
+  // The list starts closed.
+  const [open, setOpen] = useState(false);
+  // The card stays a moment after closing, to lift back toward the button and fade.
+  const floating = usePresence(open, FLOAT_EXIT_MS);
   const listId = useId();
   const navRef = useRef<HTMLElement>(null);
 
-  // The list over the book closes on Escape and on a press anywhere else.
+  // The list closes on Escape and on a press anywhere else.
   useEffect(() => {
-    if (docked || !floatOpen) return;
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      setFloatOpen(false);
+      setOpen(false);
       navRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
     };
     const onPress = (e: PointerEvent) => {
-      if (!navRef.current?.contains(e.target as Node)) setFloatOpen(false);
+      if (!navRef.current?.contains(e.target as Node)) setOpen(false);
     };
     // The EPUB text is in an iframe, whose presses never reach this document: leaving the window
     // for it shows up as a blur.
-    const onBlur = () => setFloatOpen(false);
+    const onBlur = () => setOpen(false);
     document.addEventListener('keydown', onKey);
     document.addEventListener('pointerdown', onPress);
     window.addEventListener('blur', onBlur);
@@ -132,12 +111,11 @@ export function ContentsOutline({
       document.removeEventListener('pointerdown', onPress);
       window.removeEventListener('blur', onBlur);
     };
-  }, [docked, floatOpen]);
+  }, [open]);
 
-  const toggle = () => (docked ? onRailToggle?.() : setFloatOpen((o) => !o));
   const go = (item: ContentsItem) => {
     onGo(item);
-    if (!docked) setFloatOpen(false);
+    setOpen(false);
   };
 
   return (
@@ -152,20 +130,18 @@ export function ContentsOutline({
         aria-label="Contents"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
-        onClick={toggle}
+        onClick={() => setOpen((o) => !o)}
         // The icon lines up with the Library chevron above it.
         className={cn(placement === 'rail' && '-ml-[13px]', open && 'text-ink')}
       >
         <MenuIcon />
       </IconButton>
-      {docked && railOpen && (
-        <div id={listId} className={cn(SCROLLS, 'pr-2 pb-4')}>
-          <ContentsList items={items} currentId={currentId} onGo={go} emptyText={emptyText} />
-        </div>
+      {placement === 'rail' && items && items.length > 0 && (
+        <ChapterTicks items={items} currentId={currentId} onGo={go} />
       )}
       {floating.mounted && (
         <FloatingCard
-          // Only the open card is the one the button controls (the docked list may be back already).
+          // Only the open card is the one the button controls.
           id={floating.closing ? undefined : listId}
           placement={placement}
           closing={floating.closing}
@@ -174,6 +150,142 @@ export function ContentsOutline({
         </FloatingCard>
       )}
     </nav>
+  );
+}
+
+/** An entry as a tick, with the volume it is in (named on hover). */
+type Tick = { item: ContentsItem; volume: string | null; head: boolean; groupStart: boolean };
+
+/**
+ * The entries as ticks, in reading order. A volume that goes somewhere gets a longer tick of its
+ * own ahead of its chapters. A gap starts each volume, and each run of entries outside a volume.
+ */
+function ticksOf(items: readonly ContentsItem[]): Tick[] {
+  const ticks: Tick[] = [];
+  let inLooseRun = false;
+  for (const item of items) {
+    if (item.children.length === 0) {
+      ticks.push({ item, volume: null, head: false, groupStart: !inLooseRun && ticks.length > 0 });
+      inLooseRun = true;
+      continue;
+    }
+    inLooseRun = false;
+    let first = ticks.length > 0;
+    if (item.target) {
+      ticks.push({ item, volume: null, head: true, groupStart: first });
+      first = false;
+    }
+    for (const child of item.children) {
+      ticks.push({ item: child, volume: item.label, head: false, groupStart: first });
+      first = false;
+    }
+  }
+  return ticks;
+}
+
+/**
+ * Under the ☰ button, a tick for each chapter, the current one long and in the accent colour:
+ * where you are in the book at a glance. With a mouse the strip is one scrub area: the tick
+ * nearest the pointer grows and names its chapter, and a click goes there. The ticks are too small
+ * to be buttons, so they are hidden from screen readers and on touch screens; the ☰ list is the
+ * way there. With more entries than room, the ticks press closer, down to touching.
+ */
+function ChapterTicks({
+  items,
+  currentId,
+  onGo,
+}: Pick<Props, 'currentId' | 'onGo'> & { items: ContentsItem[] }) {
+  const ticks = ticksOf(items);
+  // The tick under the pointer, and where its middle is in the strip (for its name).
+  const [hover, setHover] = useState<{ index: number; y: number } | null>(null);
+  const tickRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  const nearest = (y: number): number | null => {
+    let best: number | null = null;
+    let distance = Infinity;
+    tickRefs.current.forEach((el, i) => {
+      if (!el || i >= ticks.length) return;
+      const box = el.getBoundingClientRect();
+      const d = Math.abs(box.top + box.height / 2 - y);
+      if (d < distance) {
+        distance = d;
+        best = i;
+      }
+    });
+    return best;
+  };
+
+  const hovered = hover === null ? null : ticks[hover.index];
+
+  return (
+    <div
+      aria-hidden="true"
+      data-contents-ticks=""
+      onPointerMove={(e) => {
+        if (e.pointerType === 'touch') return;
+        const index = nearest(e.clientY);
+        const el = index === null ? null : tickRefs.current[index];
+        if (index === null || !el) return setHover(null);
+        if (index !== hover?.index) setHover({ index, y: el.offsetTop + el.offsetHeight / 2 });
+      }}
+      onPointerLeave={() => setHover(null)}
+      onClick={(e) => {
+        const at = nearest(e.clientY);
+        const item = at === null ? null : ticks[at].item;
+        if (item?.target) onGo(item);
+      }}
+      className="relative -ml-[13px] flex min-h-0 w-11 flex-1 cursor-pointer flex-col pt-2 pb-4 pointer-coarse:hidden"
+    >
+      {ticks.map((tick, i) => (
+        <TickRow
+          key={tick.item.id}
+          tick={tick}
+          current={tick.item.id === currentId}
+          hovered={hover?.index === i}
+          rowRef={(el) => {
+            tickRefs.current[i] = el;
+          }}
+        />
+      ))}
+      {hover && hovered && (
+        <div
+          data-contents-tick-name=""
+          className="pointer-events-none absolute left-full z-20 max-w-80 -translate-y-1/2 truncate rounded-lg border border-rule bg-surface px-2.5 py-1 text-[13px] whitespace-nowrap text-ink shadow-[0_4px_12px_var(--shadow)]"
+          style={{ top: hover.y }}
+        >
+          {hovered.volume && <span className="text-muted">{hovered.volume} › </span>}
+          {hovered.item.label}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** One tick, after a gap when it starts a group. Each row may shrink, so a long book still fits. */
+function TickRow({
+  tick,
+  current,
+  hovered,
+  rowRef,
+}: {
+  tick: Tick;
+  current: boolean;
+  hovered: boolean;
+  rowRef: (el: HTMLDivElement | null) => void;
+}) {
+  return (
+    <>
+      {tick.groupStart && <div className="min-h-0 shrink basis-2.5" />}
+      <div ref={rowRef} data-tick="" className="flex min-h-0.5 shrink basis-[5px] items-center pl-[13px]">
+        <span
+          data-current={current ? '' : undefined}
+          className={cn(
+            'h-0.5 rounded-full motion-safe:transition-[width,background-color] motion-safe:duration-150',
+            current ? 'w-5 bg-accent' : hovered ? 'w-4 bg-muted' : tick.head ? 'w-4 bg-muted/60' : 'w-2.5 bg-muted/35',
+          )}
+        />
+      </div>
+    </>
   );
 }
 

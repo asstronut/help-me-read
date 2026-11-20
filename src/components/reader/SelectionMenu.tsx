@@ -12,6 +12,7 @@ import {
 import { cn } from '@/components/ui/cn';
 import { PlusIcon } from '@/components/ui/icons';
 import { HIGHLIGHT_HEX } from './highlight-colors';
+import { SM } from './useMediaQuery';
 
 /** Where the selection is on screen, in viewport pixels. */
 export type SelectionBox = { top: number; bottom: number; left: number; right: number };
@@ -43,7 +44,8 @@ const clamp = (value: number, min: number, max: number) => Math.min(Math.max(val
 
 /**
  * Above the selection, else below it, else (a selection taller than the screen) at the
- * bottom of the screen; always inside the viewport.
+ * bottom of the screen; always inside the viewport. `side` is where it is from the selection
+ * (the taller-than-the-screen case counts as below).
  */
 function placeNear(box: SelectionBox, width: number, height: number) {
   const lowest = window.innerHeight - height - GAP;
@@ -52,9 +54,30 @@ function placeNear(box: SelectionBox, width: number, height: number) {
   const top = above >= GAP ? above : below <= lowest ? below : lowest;
   const centre = (box.left + box.right) / 2;
   return {
+    side: above >= GAP ? ('above' as const) : ('below' as const),
     top: clamp(top, GAP, lowest),
     left: clamp(centre - width / 2, GAP, window.innerWidth - width - GAP),
   };
+}
+
+/**
+ * The menu's entrance: a 120ms fade that drifts 4px out of the selection (up when the menu is
+ * above it, down when below). On a phone, where it is docked to the bottom, and with reduced
+ * motion, it only fades. It never scales: scaled text ticks when the animation ends. Started
+ * from script because the side is only known after the menu has measured itself.
+ */
+function enter(el: HTMLElement, side: 'above' | 'below') {
+  const still =
+    !window.matchMedia(SM).matches || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const from = still ? 'none' : `translateY(${side === 'above' ? 4 : -4}px)`;
+  el.animate(
+    [
+      { opacity: 0, transform: from },
+      { opacity: 1, transform: 'none' },
+    ],
+    // The repo's --ease-out curve (WAAPI can't read CSS variables).
+    { duration: 120, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' },
+  );
 }
 
 // Keeps the reader's text selection alive while a menu button is pressed.
@@ -64,10 +87,18 @@ const keepSelection = (e: MouseEvent) => e.preventDefault();
 export function SelectionMenu({ selection, box, language, onPick, onColor }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState<{ top: number; left: number } | null>(null);
+  // The entrance plays once, when the menu first appears; a selection that changes while it is
+  // showing just moves it.
+  const entered = useRef(false);
 
   useLayoutEffect(() => {
     const el = ref.current;
-    if (el) setPlace(placeNear(box, el.offsetWidth, el.offsetHeight));
+    if (!el) return;
+    const { side, top, left } = placeNear(box, el.offsetWidth, el.offsetHeight);
+    setPlace({ top, left });
+    if (entered.current) return;
+    entered.current = true;
+    enter(el, side);
   }, [box]);
 
   const tooLong = countWords(selection.text) > MAX_SELECTION_WORDS;
