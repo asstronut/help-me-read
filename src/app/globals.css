@@ -279,6 +279,42 @@ body {
   }
 }
 
+/*
+ * Something anchored to the bottom of the screen that eases in as it appears (the note editor).
+ * Phone: a bottom sheet that slides up on the drawer curve, solid the whole way, in 400ms like
+ * the Reading settings sheet. sm and up: a card that rises 8px and fades in over 200ms. It moves
+ * but never scales: scaled text is redrawn when the transition ends, which shows as a tick.
+ * Entrance only: it leaves at once, since closing is the reader's own action.
+ * Reduced motion: it only fades.
+ */
+@utility motion-rise {
+  transition: transform 400ms var(--ease-drawer);
+
+  @starting-style {
+    transform: translateY(100%);
+  }
+
+  @media (width >= 40rem) {
+    transition:
+      opacity 200ms var(--ease-out),
+      transform 200ms var(--ease-out);
+
+    @starting-style {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: opacity 200ms var(--ease-out);
+
+    @starting-style {
+      opacity: 0;
+      transform: none;
+    }
+  }
+}
+
 /* A scrolling area inside the reader: a thin bar in the theme's colours, with no track or arrows. */
 @utility scrollbar-slim {
   scrollbar-width: thin;
