@@ -77,7 +77,8 @@ test('going back to the library and opening the book again shows the page it was
     await page.getByRole('link', { name: 'Library' }).click();
     await page.getByRole('link', { name: 'Sample Book' }).first().click();
     await expect(pageInput(page)).toHaveValue('4');
-    await expect(page.locator('[data-slot="4"] canvas')).toBeInViewport({ ratio: 0.5 });
+    await expect(page.locator('[data-slot="4"] canvas')).toBeInViewport();
+    await expectPageShown(await scrollerOf(page), 4);
   }
   await expect(page.getByRole('alert').filter({ hasText: 'Could not open this PDF.' })).toHaveCount(0);
 });
@@ -88,7 +89,7 @@ test('typing a page number jumps to it', async ({ page }) => {
   await pageInput(page).fill('3');
   await pageInput(page).press('Enter');
   await expect(currentPage(page)).toHaveAttribute('data-page-number', '3');
-  await expect(currentPage(page)).toBeInViewport({ ratio: 0.5 });
+  await expectPageShown(await scrollerOf(page), 3);
 });
 
 test('a page number typed before the PDF has loaded is kept', async ({ page }) => {
@@ -109,7 +110,7 @@ test('a page number typed before the PDF has loaded is kept', async ({ page }) =
   await pageInput(page).press('Enter');
   release();
   await expect(currentPage(page)).toHaveAttribute('data-page-number', '3');
-  await expect(currentPage(page)).toBeInViewport({ ratio: 0.5 });
+  await expectPageShown(await scrollerOf(page), 3);
 });
 
 test('the keyboard turns pages, but not while typing a page number', async ({ page }) => {
@@ -386,7 +387,9 @@ test('pages in view are drawn as the view moves, and pages a screen away are not
   const id = await addSamplePdf(page, CONTENTS_PDF);
   await page.goto(`/read/${id}`);
   await expect(currentPage(page).locator('canvas')).toBeVisible();
-  for (let i = 0; i < 8; i++) await page.getByRole('button', { name: 'Zoom out' }).click();
+  // Out to the smallest zoom, however many steps that is from fitting the width.
+  const zoomOut = page.getByRole('button', { name: 'Zoom out' });
+  while (await zoomOut.isEnabled()) await zoomOut.click();
   await expect(page.getByText('25%', { exact: true })).toBeVisible();
   const scroller = await scrollerOf(page);
 
@@ -414,6 +417,21 @@ const pageTopInView = (scroller: JSHandle<HTMLElement>, n: number) =>
   );
 const expectPageAtTop = (scroller: JSHandle<HTMLElement>, n: number) =>
   expect.poll(() => pageTopInView(scroller, n)).toBeLessThan(1);
+/**
+ * The view went to page n: its top is at the top of the view, or the view is scrolled as far as
+ * it goes (a last page shorter than the view cannot reach the top).
+ */
+const expectPageShown = (scroller: JSHandle<HTMLElement>, n: number) =>
+  expect
+    .poll(() =>
+      scroller.evaluate((el, n) => {
+        const top =
+          el.querySelector(`[data-slot="${n}"]`)!.getBoundingClientRect().top - el.getBoundingClientRect().top;
+        const atEnd = el.scrollTop >= el.scrollHeight - el.clientHeight - 1;
+        return Math.abs(top) < 1 || (atEnd && top > 0 && top < el.clientHeight);
+      }, n),
+    )
+    .toBe(true);
 
 /** Records the view's scrollTop and the current page on every frame, until `stop`. */
 const watchFrames = (scroller: JSHandle<HTMLElement>) =>
