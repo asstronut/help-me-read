@@ -132,6 +132,7 @@ export function ReadingSettings({ children }: { children?: ReactNode }) {
         role="dialog"
         aria-label="Reading settings"
         className={cn(
+          'popover-motion',
           'fixed inset-x-0 top-auto bottom-0 m-0 max-h-[85dvh] w-full max-w-none overflow-y-auto',
           'rounded-t-[20px] border-t border-rule bg-surface px-5 pt-2.5 pb-7 text-ink shadow-[0_-8px_30px_var(--shadow)]',
           'backdrop:bg-shadow sm:backdrop:bg-transparent',
