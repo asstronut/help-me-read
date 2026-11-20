@@ -28,7 +28,7 @@ async function addBook(
 const contents = (page: Page) => page.getByRole('navigation', { name: 'Contents' });
 const title = (page: Page) => page.getByRole('banner');
 
-/** The contents list, opened from its ☰ button if it isn't open (it is open beside the book on a wide desktop). */
+/** The contents list, opened from its ☰ button if it isn't open. */
 async function openContents(page: Page) {
   const button = page.getByRole('button', { name: 'Contents' });
   await expect(button).toBeVisible();
@@ -120,57 +120,47 @@ test('a PDF without bookmarks says so', async ({ page }) => {
   await expect(title(page)).not.toContainText('·');
 });
 
-test('on a wide window the contents stay open beside the book, and fold to ☰ when there is no room', async ({
+/** The chapter ticks under the ☰ button (hidden from screen readers, so found by their data attributes). */
+const ticks = (page: Page) => page.locator('[data-contents-ticks] [data-tick]');
+const tickName = (page: Page) => page.locator('[data-contents-tick-name]');
+
+test('beside the book a tick stands for each chapter: hover names it, a click goes there', async ({
   page,
 }, testInfo) => {
-  test.skip(testInfo.project.name !== 'desktop', 'the rail is for wide windows');
+  test.skip(testInfo.project.name !== 'desktop', 'the ticks are for a mouse beside the book');
   const bookId = await addBook(page, 'contents.pdf');
   await page.goto(`/read/${bookId}`);
   const button = page.getByRole('button', { name: 'Contents' });
-  const chapterOne = contents(page).getByRole('button', { name: 'Chapter 1' });
-  await expect(button).toHaveAttribute('aria-expanded', 'true');
-  await expect(chapterOne).toBeVisible();
-
-  // The rail stays open after a jump, and the button folds it.
-  await contents(page).getByRole('button', { name: 'Chapter 2' }).click();
-  await expect(page.getByLabel('Page number')).toHaveValue('3');
-  await expect(chapterOne).toBeVisible();
-  await button.click();
-  await expect(chapterOne).toBeHidden();
-  await button.click();
-  await expect(chapterOne).toBeVisible();
-
-  // A narrower window has no room for it: the rail folds to ☰, which opens the list over the book.
-  await page.setViewportSize({ width: 900, height: 800 });
+  // The list starts closed; the ticks show the three chapters, the first one current.
   await expect(button).toHaveAttribute('aria-expanded', 'false');
-  await expect(chapterOne).toBeHidden();
-  await button.click();
-  await chapterOne.click();
-  await expect(page.getByLabel('Page number')).toHaveValue('1');
-  // Choosing closes the list over the book.
-  await expect(chapterOne).toBeHidden();
+  await expect(ticks(page)).toHaveCount(3);
+  await expect(ticks(page).nth(0).locator('[data-current]')).toHaveCount(1);
+
+  await ticks(page).nth(2).hover();
+  await expect(tickName(page)).toHaveText('Part Two › Chapter 3');
+  await ticks(page).nth(2).click();
+  await expect(page.getByLabel('Page number')).toHaveValue('5');
+  await expect(ticks(page).nth(2).locator('[data-current]')).toHaveCount(1);
+
+  await page.mouse.move(640, 400);
+  await expect(tickName(page)).toHaveCount(0);
 });
 
-test('a side panel takes the room on the right: the contents fold to ☰ while it is open', async ({
-  page,
-}, testInfo) => {
-  test.skip(testInfo.project.name !== 'desktop', 'the rail is for wide windows');
+test('a side panel leaves the contents rail as it is', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop', 'the rail is beside the book');
   const bookId = await addBook(page, 'contents.pdf');
   await page.goto(`/read/${bookId}`);
-  const button = page.getByRole('button', { name: 'Contents' });
-  const chapterOne = contents(page).getByRole('button', { name: 'Chapter 1' });
-  await expect(chapterOne).toBeVisible();
+  const rail = contents(page);
+  await expect(ticks(page)).toHaveCount(3);
+  const before = await rail.boundingBox();
 
   await page.getByRole('button', { name: 'Highlights and threads' }).click();
   await expect(page.getByRole('complementary', { name: 'In this book' })).toBeVisible();
-  await expect(button).toHaveAttribute('aria-expanded', 'false');
-  await expect(chapterOne).toBeHidden();
-  // The ☰ button still opens the list, over the book.
-  await button.click();
+  expect(await rail.boundingBox()).toEqual(before);
+  await expect(ticks(page)).toHaveCount(3);
+  // The ☰ button still opens the list, and choosing closes it.
+  await page.getByRole('button', { name: 'Contents' }).click();
   await contents(page).getByRole('button', { name: 'Chapter 2' }).click();
   await expect(page.getByLabel('Page number')).toHaveValue('3');
-  await expect(chapterOne).toBeHidden();
-
-  await page.getByRole('button', { name: 'Close panel' }).click();
-  await expect(chapterOne).toBeVisible();
+  await expect(contents(page).getByRole('button', { name: 'Chapter 1' })).toBeHidden();
 });

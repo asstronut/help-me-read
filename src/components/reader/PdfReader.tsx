@@ -58,8 +58,6 @@ type Props = {
   highlights: HighlightView[];
   /** The highlights under a tap, most recent first. */
   onHighlightTap: (highlights: HighlightView[]) => void;
-  /** False while a side panel takes the room beside the book. */
-  roomBeside: boolean;
   highlightsOpen: boolean;
   onHighlights: () => void;
   /** The book's languages, last in Aa. */
@@ -182,7 +180,6 @@ export default function PdfReader({
   onSelection,
   highlights,
   onHighlightTap,
-  roomBeside,
   highlightsOpen,
   onHighlights,
   languageOptions,
@@ -488,7 +485,7 @@ export default function PdfReader({
       </ReaderTopBar>
       {status}
       {/* The pages start at the top of their column: line the ☰ icon (13px into its box) up with them. */}
-      <ContentsRail {...outline} roomBeside={roomBeside} top={-13} className="sm:gap-6" balanced={false}>
+      <ContentsRail {...outline} top={-13} className="sm:gap-6" balanced={false}>
         <div className="relative min-h-0 min-w-0 flex-1">
           <div
             ref={scrollRef}

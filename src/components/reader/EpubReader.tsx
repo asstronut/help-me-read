@@ -43,8 +43,6 @@ type Props = {
   highlights: HighlightView[];
   /** The highlights under a tap, most recent first. */
   onHighlightTap: (highlights: HighlightView[]) => void;
-  /** False while a side panel takes the room beside the book. */
-  roomBeside: boolean;
   highlightsOpen: boolean;
   onHighlights: () => void;
   /** The book's languages, last in Aa. */
@@ -211,7 +209,6 @@ export default function EpubReader({
   onSelection,
   highlights,
   onHighlightTap,
-  roomBeside,
   highlightsOpen,
   onHighlights,
   languageOptions,
@@ -457,7 +454,6 @@ export default function EpubReader({
       {/* The ☰ button's 18px icon is 13px into its 44px box: line the icon up with the text. */}
       <ContentsRail
         {...outline}
-        roomBeside={roomBeside}
         top={TEXT_TOP - 13}
         className="group"
         outlineClassName={hideControls}

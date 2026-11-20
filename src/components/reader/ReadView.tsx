@@ -323,7 +323,6 @@ export function ReadView({ bookId, threadId, at, languages: initialLanguages }: 
     onSelection,
     highlights,
     onHighlightTap,
-    roomBeside: !sidePanel,
     highlightsOpen: listOpen,
     onHighlights: toggleList,
     languageOptions: languages && (

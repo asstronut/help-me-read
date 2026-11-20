@@ -31,7 +31,7 @@ export function ReaderTopBar({
 }: Props) {
   return (
     <header
-      className={cn('flex items-center gap-2 px-2 py-1 text-[13px] text-muted sm:gap-4 sm:px-7', className)}
+      className={cn('flex items-center gap-2 px-2 py-1 text-[14px] text-muted sm:gap-4 sm:px-7', className)}
     >
       {/* The two sides share the space equally, so the title stays centred on the page. */}
       <div className="flex flex-1 basis-0">
@@ -45,7 +45,7 @@ export function ReaderTopBar({
         </Link>
         {contents && <div className="sm:hidden">{contents}</div>}
       </div>
-      <div className="min-w-0 truncate text-center text-[11px] tracking-[0.08em] uppercase">
+      <div className="min-w-0 truncate text-center">
         {/* On a phone the chapter alone, when there is one (the title is still read out). */}
         <h1 className={cn('inline', chapter && 'max-sm:sr-only')}>{title}</h1>
         {chapter && (
