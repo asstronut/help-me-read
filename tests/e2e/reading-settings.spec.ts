@@ -123,10 +123,6 @@ test('line spacing sets the line height, and the arrow keys move between the cho
 test('line width makes the lines narrower or wider', async ({ page }) => {
   const id = await addBook(page, 'sample.epub');
   await page.goto(`/read/${id}`);
-  // On a wide window the open contents rail (and the equal space kept on the right) leaves the
-  // book about 650px at 1280px, which Medium already fills; fold it to give Wide room.
-  const contents = page.getByRole('button', { name: 'Contents' });
-  if ((await contents.getAttribute('aria-expanded')) === 'true') await contents.click();
   await expect.poll(async () => (await paragraph(page)).width).toBeGreaterThan(0);
   const medium = (await paragraph(page)).width;
 
