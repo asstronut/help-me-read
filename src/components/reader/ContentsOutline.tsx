@@ -105,7 +105,7 @@ export function ContentsOutline({
   // The list over the book starts closed.
   const [floatOpen, setFloatOpen] = useState(false);
   const open = docked ? railOpen : floatOpen;
-  // The card over the book stays a moment after closing, to shrink back into the button.
+  // The card over the book stays a moment after closing, to lift back toward the button and fade.
   const floating = usePresence(!docked && floatOpen, FLOAT_EXIT_MS);
   const listId = useId();
   const navRef = useRef<HTMLElement>(null);
