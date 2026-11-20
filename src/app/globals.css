@@ -135,12 +135,49 @@ body {
 }
 
 /*
+ * A card that drops out of the button above it: from 4px higher and see-through into place in
+ * 160ms. While it carries [data-closing] it lifts back and fades in 120ms and ignores the pointer,
+ * so a click right after closing reaches what is underneath. It moves but never scales: scaled
+ * text is redrawn when the transition ends, which shows as a tick after the card has settled.
+ * It is a transition, not keyframes, so opening again mid-close turns it around. Reduced motion:
+ * it only fades.
+ */
+@utility motion-drop {
+  transition:
+    opacity 160ms var(--ease-out),
+    transform 160ms var(--ease-out);
+
+  @starting-style {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  &[data-closing] {
+    opacity: 0;
+    transform: translateY(-4px);
+    pointer-events: none;
+    transition-duration: 120ms;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    @starting-style {
+      transform: none;
+    }
+
+    &[data-closing] {
+      transform: none;
+    }
+  }
+}
+
+/*
  * A popover that eases open and shut (Reading settings). Closing animates too: `display` and
  * `overlay` switch only at the end of the transition (allow-discrete), so it stays drawn while
  * it leaves. A transition takes the timing of the state it heads to, so the closed state
  * carries the exit timing and :popover-open the entry timing.
  *   Phone: a bottom sheet that slides up on the drawer curve, solid the whole way; the backdrop fades.
- *   sm and up: a card that grows from 97% out of its top-right corner, under the Aa button.
+ *   sm and up: a card that drops 4px into place under the Aa button. It never scales: scaled
+ *   text is redrawn when the transition ends, which shows as a tick after the card has settled.
  *   Reduced motion: it fades, nothing moves.
  * While closing it ignores the pointer, so a tap right after Escape reaches the book.
  */
@@ -189,8 +226,7 @@ body {
 
   @media (width >= 40rem) {
     opacity: 0;
-    transform: scale(0.97);
-    transform-origin: top right;
+    transform: translateY(-4px);
     transition:
       opacity 120ms var(--ease-out),
       transform 120ms var(--ease-out),
@@ -208,7 +244,7 @@ body {
 
       @starting-style {
         opacity: 0;
-        transform: scale(0.97);
+        transform: translateY(-4px);
       }
     }
 

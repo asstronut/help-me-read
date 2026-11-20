@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode 
 import { IconButton } from '@/components/ui/IconButton';
 import { cn } from '@/components/ui/cn';
 import { ChevronRightIcon, MenuIcon } from '@/components/ui/icons';
+import { usePresence } from '@/components/ui/usePresence';
 import { findItem, type ContentsItem } from '@/lib/reader/contents';
 import { PREFS, usePref } from '@/lib/reader/reading-prefs';
 import { TOUCH, WIDE, useMediaQuery } from './useMediaQuery';
@@ -104,6 +105,8 @@ export function ContentsOutline({
   // The list over the book starts closed.
   const [floatOpen, setFloatOpen] = useState(false);
   const open = docked ? railOpen : floatOpen;
+  // The card over the book stays a moment after closing, to shrink back into the button.
+  const floating = usePresence(!docked && floatOpen, FLOAT_EXIT_MS);
   const listId = useId();
   const navRef = useRef<HTMLElement>(null);
 
@@ -155,23 +158,57 @@ export function ContentsOutline({
       >
         <MenuIcon />
       </IconButton>
-      {open && (
-        <div
-          id={listId}
-          className={cn(
-            'scrollbar-slim flex min-h-0 flex-col overflow-y-auto overscroll-contain',
-            docked
-              ? 'pr-2 pb-4'
-              : // Over the book: a card under the button (on a phone, across the width under the bar).
-                'z-30 max-h-[70dvh] rounded-xl border border-rule bg-surface px-3 py-2 text-ink shadow-[0_8px_24px_var(--shadow)]',
-            !docked && placement === 'rail' && 'absolute top-12 -left-[13px] w-72',
-            placement === 'bar' && 'fixed inset-x-2 top-14',
-          )}
-        >
+      {docked && railOpen && (
+        <div id={listId} className={cn(SCROLLS, 'pr-2 pb-4')}>
           <ContentsList items={items} currentId={currentId} onGo={go} emptyText={emptyText} />
         </div>
       )}
+      {floating.mounted && (
+        <FloatingCard
+          // Only the open card is the one the button controls (the docked list may be back already).
+          id={floating.closing ? undefined : listId}
+          placement={placement}
+          closing={floating.closing}
+        >
+          <ContentsList items={items} currentId={currentId} onGo={go} emptyText={emptyText} />
+        </FloatingCard>
+      )}
     </nav>
+  );
+}
+
+/** How long the card over the book takes to lift away (see `motion-drop` in globals.css). */
+const FLOAT_EXIT_MS = 120;
+
+const SCROLLS = 'scrollbar-slim flex min-h-0 flex-col overflow-y-auto overscroll-contain';
+
+/**
+ * The list over the book: a card under the ☰ button (on a phone, across the width under the bar).
+ * It drops into place from the button when it opens and lifts back when it closes.
+ */
+function FloatingCard({
+  id,
+  placement,
+  closing,
+  children,
+}: {
+  id: string | undefined;
+  placement: 'rail' | 'bar';
+  closing: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      id={id}
+      data-closing={closing ? '' : undefined}
+      className={cn(
+        SCROLLS,
+        'motion-drop z-30 max-h-[70dvh] rounded-xl border border-rule bg-surface px-3 py-2 text-ink shadow-[0_8px_24px_var(--shadow)]',
+        placement === 'rail' ? 'absolute top-12 -left-[13px] w-72' : 'fixed inset-x-2 top-14',
+      )}
+    >
+      {children}
+    </div>
   );
 }
 
