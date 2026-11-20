@@ -68,6 +68,18 @@ describe('spend', () => {
     expect(await monthSpend(TEST_NOW)).toEqual({ monthSpendUsd: 0.75, capUsd: 10 });
   });
 
+  test('month spend counts every row past the API row limit (max_rows = 1000)', async () => {
+    const rows = Array.from({ length: 1001 }, () => ({
+      owner_id: ownerId,
+      model_id: 'test',
+      cost_usd: 0.001,
+      created_at: IN_TEST_MONTH,
+    }));
+    const { error } = await admin.from('usage_events').insert(rows);
+    expect(error).toBeNull();
+    expect((await monthSpend(TEST_NOW)).monthSpendUsd).toBeCloseTo(1.001, 6);
+  });
+
   test('the month rolls over at midnight UTC', async () => {
     const october = '2026-11-01T00:30:00+07:00';
     const november = '2026-11-01T00:00:00Z';

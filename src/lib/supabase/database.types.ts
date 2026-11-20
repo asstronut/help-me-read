@@ -191,7 +191,9 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            [_ in never]: never
+            "month_spend":
+{ Args: { "period_end": string,"period_start": string }; Returns: number
+                           }
           }
           Enums: {
             [_ in never]: never
