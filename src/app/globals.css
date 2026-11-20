@@ -112,6 +112,18 @@ body {
   background: var(--selection);
 }
 
+/*
+ * A button's state changes: colours ease over 150ms, and the press scale settles on a strong
+ * ease-out, which starts fast so the press shows the instant the finger lands. Tailwind's
+ * scale-* utilities set the scale property, not transform, so scale is the one transitioned.
+ * Opacity fades too, so a press that disables the button eases into its dimmed state.
+ */
+@utility transition-button {
+  transition-property: color, background-color, border-color, opacity, scale;
+  transition-duration: 150ms, 150ms, 150ms, 150ms, 160ms;
+  transition-timing-function: ease, ease, ease, ease, cubic-bezier(0.23, 1, 0.32, 1);
+}
+
 /* A scrolling area inside the reader: a thin bar in the theme's colours, with no track or arrows. */
 @utility scrollbar-slim {
   scrollbar-width: thin;
