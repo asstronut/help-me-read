@@ -1,0 +1,19 @@
+name: Start local Supabase
+description: Starts the local Supabase stack and writes its settings to .env.local.
+runs:
+  using: composite
+  steps:
+    - uses: supabase/setup-cli@v1
+      with:
+        version: 2.122.0
+    # Only the services the tests use: fewer image pulls, less exposure to registry limits.
+    - shell: bash
+      run: supabase start -x realtime,imgproxy,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+    - name: Write .env.local from the local stack
+      shell: bash
+      run: |
+        {
+          echo "NEXT_PUBLIC_SUPABASE_URL=$(supabase status -o env | grep '^API_URL=' | cut -d= -f2- | tr -d '\"')"
+          echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$(supabase status -o env | grep '^ANON_KEY=' | cut -d= -f2- | tr -d '\"')"
+          echo "SUPABASE_SERVICE_ROLE_KEY=$(supabase status -o env | grep '^SERVICE_ROLE_KEY=' | cut -d= -f2- | tr -d '\"')"
+        } >> .env.local

@@ -1,0 +1,17 @@
+name: Set up Node and node_modules
+description: Installs Node 24 and restores node_modules from cache, running npm ci only when the lockfile changed.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 24
+    # Keyed on the exact lockfile and Node version, so a hit is the same tree npm ci would build.
+    - id: cache
+      uses: actions/cache@v4
+      with:
+        path: node_modules
+        key: node-modules-${{ runner.os }}-node24-${{ hashFiles('package-lock.json') }}
+    - if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: npm ci

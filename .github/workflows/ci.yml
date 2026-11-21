@@ -4,19 +4,15 @@ on:
   push:
     branches: [master]
   pull_request:
+env:
+  ALLOWED_EMAIL: owner@test.local
+  AI_MOCK: '1'
 jobs:
-  test:
+  checks:
     runs-on: ubuntu-latest
-    env:
-      ALLOWED_EMAIL: owner@test.local
-      AI_MOCK: '1'
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
+      - uses: ./.github/actions/setup-node-modules
       - run: npm run typecheck
       - run: npm run lint
       - name: Production build
@@ -24,23 +20,44 @@ jobs:
         env:
           NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
           NEXT_PUBLIC_SUPABASE_ANON_KEY: build-placeholder
-        # Remove the production output so the tests' dev server starts clean.
-        run: npm run build && rm -rf .next
-      - uses: supabase/setup-cli@v1
-        with:
-          version: 2.122.0
-      # Only the services the tests use: fewer image pulls, less exposure to registry limits.
-      - run: supabase start -x realtime,imgproxy,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
-      - name: Write .env.local from the local stack
-        run: |
-          {
-            echo "NEXT_PUBLIC_SUPABASE_URL=$(supabase status -o env | grep '^API_URL=' | cut -d= -f2- | tr -d '\"')"
-            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$(supabase status -o env | grep '^ANON_KEY=' | cut -d= -f2- | tr -d '\"')"
-            echo "SUPABASE_SERVICE_ROLE_KEY=$(supabase status -o env | grep '^SERVICE_ROLE_KEY=' | cut -d= -f2- | tr -d '\"')"
-          } >> .env.local
-      - run: npx playwright install --with-deps chromium
+        run: npm run build
+
+  api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-node-modules
+      - uses: ./.github/actions/start-supabase
       - run: npm run test:api
-      - run: npm run e2e
+      - name: Show Supabase auth logs on failure
+        if: failure()
+        run: docker logs --tail 80 supabase_auth_help-me-read 2>&1 | cut -c1-400
+
+  # Specs share one owner's library, so each job runs one at a time (workers: 1).
+  # Every job has its own runner and Supabase stack, so the jobs run side by side.
+  e2e:
+    name: e2e (${{ matrix.project }} ${{ matrix.shard }}/2)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [desktop, phone]
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-node-modules
+      - uses: ./.github/actions/start-supabase
+      - id: browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - if: steps.browsers.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      # The browser is cached, but its system libraries are not.
+      - if: steps.browsers.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+      - run: npm run e2e -- --project=${{ matrix.project }} --shard=${{ matrix.shard }}/2
       - name: Show Supabase auth logs on failure
         if: failure()
         run: docker logs --tail 80 supabase_auth_help-me-read 2>&1 | cut -c1-400
