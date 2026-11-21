@@ -518,7 +518,9 @@ export default function PdfReader({
                   setNumPages(doc.numPages);
                   pageRef.current = Math.min(pageRef.current, doc.numPages);
                   setPage((p) => Math.min(p, doc.numPages));
-                }, () => setError(true));
+                  // A new file URL (each return to the book signs a new one) destroys this document,
+                  // and its pending page read fails; the new document is loading, so that is no error.
+                }, () => !doc.loadingTask.destroyed && setError(true));
               }}
               onLoadError={() => setError(true)}
             >
