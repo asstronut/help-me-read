@@ -7,8 +7,16 @@ runs:
       with:
         version: 2.122.0
     # Only the services the tests use: fewer image pulls, less exposure to registry limits.
+    # Parallel jobs pull the same images at once, so the registry can refuse a pull ("Rate exceeded"):
+    # stop whatever half started, so its ports are free, then wait and try again.
     - shell: bash
-      run: supabase start -x realtime,imgproxy,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+      run: |
+        for attempt in 1 2 3; do
+          supabase start -x realtime,imgproxy,postgres-meta,studio,edge-runtime,logflare,vector,supavisor && exit 0
+          [ "$attempt" = 3 ] && exit 1
+          supabase stop --no-backup || true
+          sleep $((attempt * 30))
+        done
     - name: Write .env.local from the local stack
       shell: bash
       run: |
