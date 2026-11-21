@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { expect, test, type JSHandle, type Page } from '@playwright/test';
+import { expect, test, type ElementHandle, type JSHandle, type Page } from '@playwright/test';
 
 test.use({ storageState: 'tests/e2e/.auth/owner.json' });
 
@@ -294,8 +294,12 @@ test('the page never scrolls sideways on a phone', async ({ page }, testInfo) =>
 });
 
 /** The element the pages scroll in. */
-const scrollerOf = (page: Page) =>
-  page.locator('[data-slot="1"]').evaluateHandle((slot) => slot.closest<HTMLElement>('.overflow-auto')!);
+// Found in one query: a slot can be swapped out while the PDF reloads, and a detached slot has no scroller.
+const scrollerOf = async (page: Page) =>
+  (await page
+    .locator('[data-slot="1"]')
+    .locator('xpath=ancestor::div[contains(concat(" ", @class, " "), " overflow-auto ")][1]')
+    .elementHandle()) as ElementHandle<HTMLElement>;
 
 test('a page change while scrolling by hand neither hides the reader nor moves the view', async ({ page }) => {
   const id = await addSamplePdf(page, CONTENTS_PDF);
