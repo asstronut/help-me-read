@@ -412,13 +412,15 @@ test('pages in view are drawn as the view moves, and pages a screen away are not
   await atTop();
 });
 
+// A page's slot is briefly missing while the PDF reloads, as it does on each return to the book.
+// expect.poll fails at once when its callback throws, so a missing slot reads as "not there yet".
+
 /** How far a page's top is from the top of the view, in pixels (a view cannot rest between whole pixels). */
 const pageTopInView = (scroller: JSHandle<HTMLElement>, n: number) =>
-  scroller.evaluate(
-    (el, n) =>
-      Math.abs(el.querySelector(`[data-slot="${n}"]`)!.getBoundingClientRect().top - el.getBoundingClientRect().top),
-    n,
-  );
+  scroller.evaluate((el, n) => {
+    const slot = el.querySelector(`[data-slot="${n}"]`);
+    return slot ? Math.abs(slot.getBoundingClientRect().top - el.getBoundingClientRect().top) : Infinity;
+  }, n);
 const expectPageAtTop = (scroller: JSHandle<HTMLElement>, n: number) =>
   expect.poll(() => pageTopInView(scroller, n)).toBeLessThan(1);
 /**
@@ -429,8 +431,9 @@ const expectPageShown = (scroller: JSHandle<HTMLElement>, n: number) =>
   expect
     .poll(() =>
       scroller.evaluate((el, n) => {
-        const top =
-          el.querySelector(`[data-slot="${n}"]`)!.getBoundingClientRect().top - el.getBoundingClientRect().top;
+        const slot = el.querySelector(`[data-slot="${n}"]`);
+        if (!slot) return false;
+        const top = slot.getBoundingClientRect().top - el.getBoundingClientRect().top;
         const atEnd = el.scrollTop >= el.scrollHeight - el.clientHeight - 1;
         return Math.abs(top) < 1 || (atEnd && top > 0 && top < el.clientHeight);
       }, n),
