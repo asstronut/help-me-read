@@ -35,5 +35,6 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|icon\\.svg).*)'],
+  // The browser fetches the manifest without cookies, so it and the app icons must not redirect to /login.
+  matcher: ['/((?!_next/static|_next/image|icon\\.svg|apple-icon\\.png|manifest\\.webmanifest|icons/).*)'],
 };
