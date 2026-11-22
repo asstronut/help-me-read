@@ -5,6 +5,7 @@ import { HIGHLIGHT_COLORS, type HighlightColor, type HighlightView } from '@/lib
 import { Button } from '@/components/ui/Button';
 import { InlineAlert } from '@/components/ui/InlineAlert';
 import { cn } from '@/components/ui/cn';
+import { insetHover } from '@/components/ui/hover';
 import { HIGHLIGHT_HEX } from './highlight-colors';
 
 type Props = {
@@ -73,7 +74,11 @@ export function NoteEditor({ highlight, onSaved, onDeleted, onClose }: Props) {
               aria-label={NAMES[c]}
               aria-pressed={c === color}
               onClick={() => setColor(c)}
-              className="group flex size-11 cursor-pointer items-center justify-center rounded-lg hover:bg-chip focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
+              className={cn(
+                'group flex size-11 cursor-pointer items-center justify-center rounded-lg',
+                insetHover('square'),
+                'focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent',
+              )}
             >
               <span
                 aria-hidden="true"

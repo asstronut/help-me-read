@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { cn } from './cn';
+import { insetHover } from './hover';
 
 type Action = { label: string } & ({ onClick: () => void; href?: never } | { href: string; onClick?: never });
 
@@ -12,8 +13,11 @@ type Props = {
   className?: string;
 };
 
-const ACTION_CLASSES =
-  'inline-flex h-11 shrink-0 cursor-pointer items-center rounded-[10px] px-3.5 font-medium text-danger hover:bg-danger-tint focus-visible:outline-2 focus-visible:outline-accent';
+const ACTION_CLASSES = cn(
+  'inline-flex h-11 shrink-0 cursor-pointer items-center rounded-[10px] px-3.5 font-medium text-danger',
+  insetHover('row', 'danger'),
+  'focus-visible:outline-2 focus-visible:outline-accent',
+);
 
 /** A calm error in the flow of the page, with at most one action. */
 export function InlineAlert({ children, action, className }: Props) {

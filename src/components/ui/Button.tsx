@@ -1,5 +1,6 @@
 import type { ComponentProps } from 'react';
 import { cn } from './cn';
+import { insetHover } from './hover';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'quiet' | 'danger';
 
@@ -15,8 +16,9 @@ const VARIANTS: Record<ButtonVariant, string> = {
     'not-disabled:motion-safe:active:scale-[0.97]',
   ),
   secondary: 'rounded-full border border-rule px-[18px] text-ink hover:bg-chip',
-  quiet: 'rounded-[10px] px-3.5 text-muted hover:bg-chip hover:text-ink',
-  danger: 'rounded-[10px] px-3.5 text-danger hover:bg-danger-tint',
+  // The grey (or the danger tint) is 32px tall inside the 44px button: see `insetHover`.
+  quiet: cn('rounded-[10px] px-3.5 text-muted hover:text-ink', insetHover('row')),
+  danger: cn('rounded-[10px] px-3.5 text-danger', insetHover('row', 'danger')),
 };
 
 /** Classes for a button-shaped control, for a link that should look like a button. */

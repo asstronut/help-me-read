@@ -10,6 +10,7 @@ import {
   type ReaderSelection,
 } from '@/lib/types';
 import { cn } from '@/components/ui/cn';
+import { insetHover } from '@/components/ui/hover';
 import { PlusIcon } from '@/components/ui/icons';
 import { HIGHLIGHT_HEX } from './highlight-colors';
 import { SM } from './useMediaQuery';
@@ -35,7 +36,7 @@ const LABELS: Record<MenuItem, string> = {
 };
 
 const FOCUS = 'focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent';
-const ACTION = cn('inline-flex h-11 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 hover:bg-chip', FOCUS);
+const ACTION = cn('inline-flex h-11 cursor-pointer items-center gap-1.5 rounded-lg px-2.5', insetHover('row'), FOCUS);
 const Divider = () => <span aria-hidden="true" className="mx-1 hidden h-5 w-px shrink-0 bg-rule sm:block" />;
 
 const GAP = 8;
@@ -126,7 +127,7 @@ export function SelectionMenu({ selection, box, language, onPick, onColor }: Pro
                 type="button"
                 aria-label={`Highlight ${color}`}
                 onClick={() => onColor(color)}
-                className={cn('flex size-11 cursor-pointer items-center justify-center rounded-lg hover:bg-chip', FOCUS)}
+                className={cn('flex size-11 cursor-pointer items-center justify-center rounded-lg', insetHover('square'), FOCUS)}
               >
                 <span
                   aria-hidden="true"

@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { SiteNav } from '@/components/SiteNav';
 import { Button, buttonClasses } from '@/components/ui/Button';
+import { cn } from '@/components/ui/cn';
+import { insetHover } from '@/components/ui/hover';
 import { DownloadIcon, SearchIcon } from '@/components/ui/icons';
 import { InlineAlert } from '@/components/ui/InlineAlert';
 import type { VocabEntryView } from '@/lib/vocab/service.server';
@@ -94,8 +96,11 @@ export default function VocabPage() {
 }
 
 // A link in the accent colour, 44px tall like a button.
-const OPEN_LINK =
-  'inline-flex h-11 items-center rounded-[10px] px-3.5 text-sm text-accent hover:bg-chip focus-visible:outline-2 focus-visible:outline-accent';
+const OPEN_LINK = cn(
+  'inline-flex h-11 items-center rounded-[10px] px-3.5 text-sm text-accent',
+  insetHover('row'),
+  'focus-visible:outline-2 focus-visible:outline-accent',
+);
 
 /** One saved word: the word, its meaning, the sentence it came from and its book. */
 function VocabRow({ entry, onDelete }: { entry: VocabEntryView; onDelete: () => void }) {
