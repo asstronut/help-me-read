@@ -22,14 +22,12 @@ export function progressLabel(progress: number | null): string {
   return progress === null ? 'New' : `${Math.round(Math.min(Math.max(progress, 0), 1) * 100)}%`;
 }
 
-/** A plain cover drawn from the book's title (and author, when `withAuthor`), 2:3 like a book. */
+/** A plain cover drawn from the book's title and author, 2:3 like a book. */
 export function BookCover({
   book,
-  withAuthor = false,
   className,
 }: {
   book: Pick<BookItem, 'id' | 'title' | 'author'>;
-  withAuthor?: boolean;
   className?: string;
 }) {
   return (
@@ -40,10 +38,9 @@ export function BookCover({
         className,
       )}
     >
-      <span className="line-clamp-6 font-serif text-base leading-tight hyphens-auto">{book.title}</span>
-      {withAuthor && book.author && (
-        <span className="line-clamp-2 text-[11px] tracking-[0.08em] uppercase opacity-85">{book.author}</span>
-      )}
+      {/* The right padding keeps the title clear of the ⋯ button in the cover's corner. */}
+      <span className="line-clamp-6 pr-6 font-serif text-base leading-tight hyphens-auto">{book.title}</span>
+      {book.author && <span className="line-clamp-2 text-xs opacity-80">{book.author}</span>}
     </span>
   );
 }

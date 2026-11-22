@@ -263,8 +263,9 @@ test('the reading progress saved in the reader shows in the library', async ({ p
     'aria-valuenow',
     shown!,
   );
-  // A PDF without bookmarks has no chapter to add to the author.
-  await expect(continuing.locator('p', { hasText: /^Test Author$/ })).toBeVisible();
+  // The author is on the cover; a PDF without bookmarks has no chapter to show under the title.
+  await expect(continuing).toContainText('Test Author');
+  await expect(continuing.locator('p', { hasText: /^Test Author$/ })).toHaveCount(0);
   await continuing.getByRole('link', { name: 'Continue' }).click();
   await expect(page.getByLabel('Page number')).toHaveValue('2');
 });
@@ -303,13 +304,13 @@ async function readChapterThree(page: Page, bookId: string, volume: string) {
   expect((await saved).status()).toBe(204);
 }
 
-test('a PDF read to a chapter shows "Author · Chapter" on the Continue reading card', async ({ page }) => {
+test('a PDF read to a chapter shows the chapter under the title on the Continue reading card', async ({ page }) => {
   const bookId = await addContentsBook(page, 'contents.pdf', 'Test Author');
   await readChapterThree(page, bookId, 'Part Two');
 
   await page.goto('/library');
   const continuing = page.getByRole('region', { name: 'Continue reading' });
-  await expect(continuing.getByText('Test Author · Chapter 3')).toBeVisible();
+  await expect(continuing.getByText('Chapter 3', { exact: true })).toBeVisible();
 });
 
 test('an EPUB read to a chapter shows the chapter alone when the book has no author', async ({ page }) => {
@@ -319,6 +320,31 @@ test('an EPUB read to a chapter shows the chapter alone when the book has no aut
   await page.goto('/library');
   const continuing = page.getByRole('region', { name: 'Continue reading' });
   await expect(continuing.getByText('Chapter 3', { exact: true })).toBeVisible();
+});
+
+test('the book on the Continue reading card can be renamed and deleted from its ⋯ menu', async ({ page }) => {
+  const bookId = await addContentsBook(page, 'contents.pdf', 'Test Author');
+  await readChapterThree(page, bookId, 'Part Two');
+  await page.goto('/library');
+  const card = page.getByRole('region', { name: 'Continue reading' });
+  const row = page.getByRole('listitem').filter({ hasText: 'Book' });
+
+  await card.getByRole('button', { name: 'Options for Contents Book' }).click();
+  await card.getByRole('button', { name: 'Rename Contents Book' }).click();
+  // Only the card's copy of the book opens the form; the shelf's stays as it was.
+  await expect(row.getByLabel('Book title')).toHaveCount(0);
+  await card.getByLabel('Book title').fill('Renamed Book');
+  await card.getByRole('button', { name: 'Save' }).click();
+  await expect(card).toContainText('Renamed Book');
+  await expect(row).toContainText('Renamed Book');
+
+  await card.getByRole('button', { name: 'Options for Renamed Book' }).click();
+  await card.getByRole('button', { name: 'Delete Renamed Book' }).click();
+  const deleted = page.waitForResponse((r) => r.request().method() === 'DELETE');
+  await card.getByRole('button', { name: 'Yes, delete' }).click();
+  expect((await deleted).status()).toBe(204);
+  await expect(card).toHaveCount(0);
+  await expect(page.getByText('No books yet')).toBeVisible();
 });
 
 test('the ⋯ menu closes with Escape and gives focus back', async ({ page }) => {
