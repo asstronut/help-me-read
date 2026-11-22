@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { cn } from './ui/cn';
+import { insetChosen } from './ui/hover';
 
 const PAGES = [
   { href: '/library', label: 'Library' },
@@ -23,7 +24,8 @@ export function SiteNav({ current }: { current: SitePage }) {
             className={cn(
               'inline-flex h-11 items-center rounded-full px-3.5 transition-colors',
               'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
-              p.label === current ? 'bg-chip text-ink' : 'text-muted hover:text-ink',
+              // The current page's pill is 32px tall inside the 44px link, like the other greys.
+              p.label === current ? cn(insetChosen('pill'), 'text-ink') : 'text-muted hover:text-ink',
             )}
           >
             {p.label}
