@@ -3,6 +3,7 @@
 import { useState, type ComponentProps } from 'react';
 import { ChevronLeftIcon, ChevronRightIcon, MinusIcon, PlusIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
+import { insetHover } from '@/components/ui/hover';
 import type { PageTurn } from '@/lib/reader/page-keys';
 import type { PdfFit } from '@/lib/reader/reading-prefs';
 
@@ -30,9 +31,10 @@ function BarButton({ className, ...props }: ComponentProps<'button'> & { 'aria-l
     <button
       type="button"
       className={cn(
-        'inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-[10px] transition-colors hover:bg-chip',
+        'inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-[10px] transition-colors',
+        insetHover('square'),
         'focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent',
-        'disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent',
+        'disabled:cursor-default disabled:opacity-40',
         className,
       )}
       {...props}

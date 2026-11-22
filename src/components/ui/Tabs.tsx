@@ -2,6 +2,7 @@
 
 import { useRef, type KeyboardEvent } from 'react';
 import { cn } from './cn';
+import { insetChosen } from './hover';
 
 export type TabOption<T extends string> = { value: T; label: string };
 
@@ -73,7 +74,8 @@ export function Tabs<T extends string>({ label, options, value, onChange, idPref
             className={cn(
               'h-11 min-w-0 cursor-pointer truncate px-3 text-center transition-colors',
               'focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent',
-              selected ? 'bg-chip text-ink' : 'text-muted hover:text-ink',
+              // The chosen tab's grey sits 4px inside the bar; the others only darken on hover.
+              selected ? cn(insetChosen('cell'), 'text-ink') : 'text-muted hover:text-ink',
             )}
           >
             {o.label}

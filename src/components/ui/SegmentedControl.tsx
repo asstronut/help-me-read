@@ -2,6 +2,7 @@
 
 import { useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { cn } from './cn';
+import { insetChosen } from './hover';
 
 export type SegmentOption<T extends string> = {
   value: T;
@@ -88,7 +89,8 @@ export function SegmentedControl<T extends string>({
               'focus-visible:outline-2 focus-visible:outline-accent',
               'disabled:cursor-default disabled:opacity-50',
               variant === 'joined' && 'h-11 focus-visible:-outline-offset-2',
-              variant === 'joined' && (checked ? 'bg-chip text-ink' : 'text-muted hover:text-ink'),
+              // The chosen segment's grey sits 4px inside the bar, like the chosen tab in Tabs.
+              variant === 'joined' && (checked ? cn(insetChosen('cell'), 'text-ink') : 'text-muted hover:text-ink'),
               // A ring rather than a thicker border, so the chosen card's content doesn't move.
               variant === 'cards' &&
                 'flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-[10px] border border-rule focus-visible:outline-offset-2',

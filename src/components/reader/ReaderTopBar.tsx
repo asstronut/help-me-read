@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { IconButton } from '@/components/ui/IconButton';
 import { cn } from '@/components/ui/cn';
+import { insetHover } from '@/components/ui/hover';
 import { BookmarkIcon, ChevronLeftIcon } from '@/components/ui/icons';
 
 type Props = {
@@ -37,7 +38,12 @@ export function ReaderTopBar({
       <div className="flex flex-1 basis-0">
         <Link
           href="/library"
-          className="inline-flex h-11 min-w-11 items-center justify-center gap-2 rounded-[10px] transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-accent sm:-ml-2 sm:px-2"
+          className={cn(
+            'inline-flex h-11 min-w-11 items-center justify-center gap-2 rounded-[10px] transition-colors hover:text-ink sm:-ml-2 sm:px-2',
+            // The same 32px grey as the icon buttons on the right of the bar.
+            insetHover('row'),
+            'focus-visible:outline-2 focus-visible:outline-accent',
+          )}
         >
           <ChevronLeftIcon />
           {/* Just the chevron on a phone, to leave room for the title; the name stays "Library". */}
