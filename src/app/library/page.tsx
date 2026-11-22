@@ -6,7 +6,7 @@ import { SiteNav } from '@/components/SiteNav';
 import { Button, buttonClasses } from '@/components/ui/Button';
 import { cn } from '@/components/ui/cn';
 import { IconButton } from '@/components/ui/IconButton';
-import { MoreIcon, RefreshIcon } from '@/components/ui/icons';
+import { MoreVerticalIcon, RefreshIcon } from '@/components/ui/icons';
 import { InlineAlert } from '@/components/ui/InlineAlert';
 import { FIELD } from '@/components/ui/field';
 import type { BookItem } from '@/lib/books/book-item';
@@ -240,7 +240,7 @@ function ShelfBook({
   const broken = !book.extracted && failed;
   const preparing = !book.extracted && !failed;
   return (
-    <li className="flex min-w-0 flex-col gap-2.5">
+    <li className="group/book flex min-w-0 flex-col gap-2.5">
       <div className="relative">
         <Link
           href={`/read/${book.id}`}
@@ -264,27 +264,24 @@ function ShelfBook({
             </Button>
           </div>
         )}
-      </div>
-      <div className="flex items-start gap-1">
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="truncate text-sm font-medium">{book.title}</span>
-          {book.author && <span className="truncate text-xs text-muted">{book.author}</span>}
-          {broken ? (
-            <span className="text-xs text-danger">Couldn&apos;t prepare text</span>
-          ) : preparing ? (
-            <span className="text-xs text-muted">Preparing text…</span>
-          ) : (
-            <span className="text-xs text-muted tabular-nums">
-              {`${book.format.toUpperCase()} · ${progressLabel(book.progress)}`}
-            </span>
-          )}
-        </div>
         <BookMenu
           title={book.title}
           disabled={confirming || renaming}
           onRename={onAskRename}
           onDelete={onAskDelete}
         />
+      </div>
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="truncate text-sm font-medium">{book.title}</span>
+        {broken ? (
+          <span className="text-xs text-danger">Couldn&apos;t prepare text</span>
+        ) : preparing ? (
+          <span className="text-xs text-muted">Preparing text…</span>
+        ) : (
+          <span className="text-xs text-muted tabular-nums">
+            {`${book.format.toUpperCase()} · ${progressLabel(book.progress)}`}
+          </span>
+        )}
       </div>
       {renaming && <RenameForm title={book.title} onSave={onRename} onCancel={onCancelRename} />}
       {confirming && <DeleteConfirm deleting={deleting} onDelete={onDelete} onCancel={onCancelDelete} />}
@@ -330,18 +327,26 @@ function ContinueReading({
   onRename,
   onCancelRename,
 }: BookActionProps & { book: BookItem }) {
-  const where = [book.author, book.chapter].filter(Boolean).join(' · ');
   const percent = book.progress === null ? null : Math.round(Math.min(Math.max(book.progress, 0), 1) * 100);
   return (
-    <section aria-labelledby="continue" className="flex flex-wrap items-center gap-5 sm:gap-8">
-      <BookCover book={book} withAuthor className="w-32 shadow-[0_14px_30px_var(--shadow)] sm:w-[200px] lg:w-[220px]" />
+    <section aria-labelledby="continue" className="group/book flex flex-wrap items-center gap-5 sm:gap-8">
+      <div className="relative w-32 shrink-0 sm:w-[200px] lg:w-[220px]">
+        <BookCover book={book} className="shadow-[0_14px_30px_var(--shadow)]" />
+        <BookMenu
+          title={book.title}
+          disabled={confirming || renaming}
+          onRename={onAskRename}
+          onDelete={onAskDelete}
+        />
+      </div>
       <div className="flex min-w-0 flex-[1_1_200px] flex-col gap-3">
         {/* The title and the Continue button say what this is; the heading names it for screen readers. */}
         <h2 id="continue" className="sr-only">
           Continue reading
         </h2>
         <p className="font-serif text-[28px] leading-tight break-words sm:text-4xl">{book.title}</p>
-        {where && <p className="text-[15px] break-words text-muted">{where}</p>}
+        {/* The cover shows the author, so this line is only where the reader is. */}
+        {book.chapter && <p className="text-[15px] break-words text-muted">{book.chapter}</p>}
         {percent !== null && (
           <div className="flex max-w-[360px] items-center gap-3">
             <div
@@ -360,17 +365,10 @@ function ContinueReading({
             </span>
           </div>
         )}
-        <div className="mt-2 flex flex-wrap items-center gap-2.5">
+        <div className="mt-2 flex flex-wrap gap-2.5">
           <Link href={`/read/${book.id}`} className={buttonClasses('primary')}>
             Continue
           </Link>
-          <BookMenu
-            title={book.title}
-            disabled={confirming || renaming}
-            onRename={onAskRename}
-            onDelete={onAskDelete}
-            align="start"
-          />
         </div>
         {(renaming || confirming) && (
           <div className="max-w-[360px]">
@@ -453,20 +451,21 @@ function RenameForm({
   );
 }
 
-/** The ⋯ button beside a book and the actions it opens: Rename and Delete. */
+/**
+ * The ⋮ button in a book cover's top-right corner and the actions it opens: Rename and Delete.
+ * It sits inside a `group/book`. With a mouse it shows while that book is hovered or has focus,
+ * or while its menu is open; a touch screen has no hover, so there it always shows.
+ */
 function BookMenu({
   title,
   disabled,
   onRename,
   onDelete,
-  align = 'end',
 }: {
   title: string;
   disabled: boolean;
   onRename: () => void;
   onDelete: () => void;
-  /** Which edge of ⋯ the menu lines up with: `end` beside a shelf title, `start` beside Continue. */
-  align?: 'start' | 'end';
 }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -494,24 +493,29 @@ function BookMenu({
   }, [open]);
 
   return (
-    <div ref={root} className={cn('relative', align === 'end' && '-mt-1.5 -mr-2.5')}>
+    <div
+      ref={root}
+      className={cn(
+        'absolute top-0 right-0 z-10 transition-opacity duration-150',
+        !open &&
+          '[@media(hover:hover)_and_(pointer:fine)]:opacity-0 group-focus-within/book:opacity-100 group-hover/book:opacity-100',
+      )}
+    >
       <IconButton
         ref={trigger}
+        look="floating"
         aria-label={`Options for ${title}`}
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
       >
-        <MoreIcon size={16} />
+        <MoreVerticalIcon size={16} />
       </IconButton>
       {open && (
         <div
           id={menuId}
-          className={cn(
-            'absolute top-full z-10 flex flex-col items-stretch rounded-xl border border-rule bg-surface p-1 shadow-[0_8px_24px_var(--shadow)]',
-            align === 'end' ? 'right-0' : 'left-0',
-          )}
+          className="absolute top-full right-1 flex flex-col items-stretch rounded-xl border border-rule bg-surface p-1 shadow-[0_8px_24px_var(--shadow)]"
         >
           <Button
             ref={first}

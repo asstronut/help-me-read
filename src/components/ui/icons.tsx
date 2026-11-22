@@ -90,6 +90,15 @@ export const MoreIcon = (props: IconProps) => (
   </Icon>
 );
 
+/** Three dots stacked: the options for one item, in its corner. */
+export const MoreVerticalIcon = (props: IconProps) => (
+  <Icon fill="currentColor" stroke="none" {...props}>
+    <circle cx="12" cy="5" r="1.6" />
+    <circle cx="12" cy="12" r="1.6" />
+    <circle cx="12" cy="19" r="1.6" />
+  </Icon>
+);
+
 /** An arrow pointing up: send. */
 export const ArrowUpIcon = (props: IconProps) => (
   <Icon {...props}>
