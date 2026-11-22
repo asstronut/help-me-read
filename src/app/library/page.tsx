@@ -19,6 +19,7 @@ export default function LibraryPage() {
   const [books, setBooks] = useState<BookItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [failed, setFailed] = useState<ReadonlySet<string>>(new Set());
+  // The book read last shows on the card and on the shelf: these hold a shelf book's id, or CARD.
   const [confirming, setConfirming] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -131,7 +132,26 @@ export default function LibraryPage() {
     <main className="mx-auto flex w-full max-w-[1040px] flex-col gap-10 px-4 pt-5 pb-16 sm:gap-12 sm:px-6 sm:pt-7">
       <SiteNav current="Library" />
       {error && <InlineAlert>{error}</InlineAlert>}
-      {continuing && <ContinueReading book={continuing} />}
+      {continuing && (
+        <ContinueReading
+          book={continuing}
+          confirming={confirming === CARD}
+          deleting={deleting}
+          onAskDelete={() => {
+            setRenaming(null);
+            setConfirming(CARD);
+          }}
+          onDelete={() => void remove(continuing.id)}
+          onCancelDelete={() => setConfirming(null)}
+          renaming={renaming === CARD}
+          onAskRename={() => {
+            setConfirming(null);
+            setRenaming(CARD);
+          }}
+          onRename={(title) => rename(continuing.id, title)}
+          onCancelRename={() => setRenaming(null)}
+        />
+      )}
 
       <section aria-labelledby="shelf" className="flex flex-col gap-5">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rule pb-3">
@@ -178,11 +198,11 @@ export default function LibraryPage() {
   );
 }
 
-type ShelfBookProps = {
-  book: BookItem;
-  /** Preparing its text failed on this visit. */
-  failed: boolean;
-  onRetry: () => void;
+/** The key `confirming` and `renaming` use for the Continue reading card. */
+const CARD = 'continue';
+
+/** Rename and Delete for one book, on the card or the shelf. */
+type BookActionProps = {
   confirming: boolean;
   deleting: boolean;
   onAskDelete: () => void;
@@ -193,6 +213,13 @@ type ShelfBookProps = {
   /** Resolves to an error message, or null once the new title is saved. */
   onRename: (title: string) => Promise<string | null>;
   onCancelRename: () => void;
+};
+
+type ShelfBookProps = BookActionProps & {
+  book: BookItem;
+  /** Preparing its text failed on this visit. */
+  failed: boolean;
+  onRetry: () => void;
 };
 
 /** One book on the shelf: its cover (which opens it), its title, author and progress, and ⋯. */
@@ -260,32 +287,57 @@ function ShelfBook({
         />
       </div>
       {renaming && <RenameForm title={book.title} onSave={onRename} onCancel={onCancelRename} />}
-      {confirming && (
-        <div className="flex flex-col gap-2 rounded-xl bg-danger-tint p-3 text-sm">
-          <span>Delete this book with its highlights, threads and notes?</span>
-          <div className="flex flex-wrap gap-1">
-            <Button variant="danger" onClick={onDelete} disabled={deleting}>
-              Yes, delete
-            </Button>
-            <Button variant="quiet" onClick={onCancelDelete} disabled={deleting}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      )}
+      {confirming && <DeleteConfirm deleting={deleting} onDelete={onDelete} onCancel={onCancelDelete} />}
     </li>
   );
 }
 
-/** The book read last: its cover, where the reader is in it, and a way back in. */
-function ContinueReading({ book }: { book: BookItem }) {
+/** Asks before a book goes, with its highlights, threads and notes. */
+function DeleteConfirm({
+  deleting,
+  onDelete,
+  onCancel,
+}: {
+  deleting: boolean;
+  onDelete: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2 rounded-xl bg-danger-tint p-3 text-sm">
+      <span>Delete this book with its highlights, threads and notes?</span>
+      <div className="flex flex-wrap gap-1">
+        <Button variant="danger" onClick={onDelete} disabled={deleting}>
+          Yes, delete
+        </Button>
+        <Button variant="quiet" onClick={onCancel} disabled={deleting}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** The book read last: its cover, where the reader is in it, a way back in, and ⋯. */
+function ContinueReading({
+  book,
+  confirming,
+  deleting,
+  onAskDelete,
+  onDelete,
+  onCancelDelete,
+  renaming,
+  onAskRename,
+  onRename,
+  onCancelRename,
+}: BookActionProps & { book: BookItem }) {
   const where = [book.author, book.chapter].filter(Boolean).join(' · ');
   const percent = book.progress === null ? null : Math.round(Math.min(Math.max(book.progress, 0), 1) * 100);
   return (
     <section aria-labelledby="continue" className="flex flex-wrap items-center gap-5 sm:gap-8">
-      <BookCover book={book} withAuthor className="w-24 shadow-[0_14px_30px_var(--shadow)] sm:w-[150px]" />
+      <BookCover book={book} withAuthor className="w-32 shadow-[0_14px_30px_var(--shadow)] sm:w-[200px] lg:w-[220px]" />
       <div className="flex min-w-0 flex-[1_1_200px] flex-col gap-3">
-        <h2 id="continue" className="text-xs font-medium tracking-[0.1em] text-muted uppercase">
+        {/* The title and the Continue button say what this is; the heading names it for screen readers. */}
+        <h2 id="continue" className="sr-only">
           Continue reading
         </h2>
         <p className="font-serif text-[28px] leading-tight break-words sm:text-4xl">{book.title}</p>
@@ -308,11 +360,24 @@ function ContinueReading({ book }: { book: BookItem }) {
             </span>
           </div>
         )}
-        <div className="mt-2 flex flex-wrap gap-2.5">
+        <div className="mt-2 flex flex-wrap items-center gap-2.5">
           <Link href={`/read/${book.id}`} className={buttonClasses('primary')}>
             Continue
           </Link>
+          <BookMenu
+            title={book.title}
+            disabled={confirming || renaming}
+            onRename={onAskRename}
+            onDelete={onAskDelete}
+            align="start"
+          />
         </div>
+        {(renaming || confirming) && (
+          <div className="max-w-[360px]">
+            {renaming && <RenameForm title={book.title} onSave={onRename} onCancel={onCancelRename} />}
+            {confirming && <DeleteConfirm deleting={deleting} onDelete={onDelete} onCancel={onCancelDelete} />}
+          </div>
+        )}
       </div>
     </section>
   );
@@ -394,11 +459,14 @@ function BookMenu({
   disabled,
   onRename,
   onDelete,
+  align = 'end',
 }: {
   title: string;
   disabled: boolean;
   onRename: () => void;
   onDelete: () => void;
+  /** Which edge of ⋯ the menu lines up with: `end` beside a shelf title, `start` beside Continue. */
+  align?: 'start' | 'end';
 }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -426,7 +494,7 @@ function BookMenu({
   }, [open]);
 
   return (
-    <div ref={root} className="relative -mt-1.5 -mr-2.5">
+    <div ref={root} className={cn('relative', align === 'end' && '-mt-1.5 -mr-2.5')}>
       <IconButton
         ref={trigger}
         aria-label={`Options for ${title}`}
@@ -440,7 +508,10 @@ function BookMenu({
       {open && (
         <div
           id={menuId}
-          className="absolute top-full right-0 z-10 flex flex-col items-stretch rounded-xl border border-rule bg-surface p-1 shadow-[0_8px_24px_var(--shadow)]"
+          className={cn(
+            'absolute top-full z-10 flex flex-col items-stretch rounded-xl border border-rule bg-surface p-1 shadow-[0_8px_24px_var(--shadow)]',
+            align === 'end' ? 'right-0' : 'left-0',
+          )}
         >
           <Button
             ref={first}

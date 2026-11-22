@@ -321,6 +321,31 @@ test('an EPUB read to a chapter shows the chapter alone when the book has no aut
   await expect(continuing.getByText('Chapter 3', { exact: true })).toBeVisible();
 });
 
+test('the book on the Continue reading card can be renamed and deleted from its ⋯ menu', async ({ page }) => {
+  const bookId = await addContentsBook(page, 'contents.pdf', 'Test Author');
+  await readChapterThree(page, bookId, 'Part Two');
+  await page.goto('/library');
+  const card = page.getByRole('region', { name: 'Continue reading' });
+  const row = page.getByRole('listitem').filter({ hasText: 'Book' });
+
+  await card.getByRole('button', { name: 'Options for Contents Book' }).click();
+  await card.getByRole('button', { name: 'Rename Contents Book' }).click();
+  // Only the card's copy of the book opens the form; the shelf's stays as it was.
+  await expect(row.getByLabel('Book title')).toHaveCount(0);
+  await card.getByLabel('Book title').fill('Renamed Book');
+  await card.getByRole('button', { name: 'Save' }).click();
+  await expect(card).toContainText('Renamed Book');
+  await expect(row).toContainText('Renamed Book');
+
+  await card.getByRole('button', { name: 'Options for Renamed Book' }).click();
+  await card.getByRole('button', { name: 'Delete Renamed Book' }).click();
+  const deleted = page.waitForResponse((r) => r.request().method() === 'DELETE');
+  await card.getByRole('button', { name: 'Yes, delete' }).click();
+  expect((await deleted).status()).toBe(204);
+  await expect(card).toHaveCount(0);
+  await expect(page.getByText('No books yet')).toBeVisible();
+});
+
 test('the ⋯ menu closes with Escape and gives focus back', async ({ page }) => {
   await page.getByLabel('Choose a book').setInputFiles(SAMPLE_PDF);
   const row = page.getByRole('listitem').filter({ hasText: 'Sample Book' });
