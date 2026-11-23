@@ -272,7 +272,7 @@ function ShelfBook({
         />
       </div>
       <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="truncate text-sm font-medium">{book.title}</span>
+        <span className="line-clamp-2 text-sm font-medium break-words">{book.title}</span>
         {broken ? (
           <span className="text-xs text-danger">Couldn&apos;t prepare text</span>
         ) : preparing ? (
