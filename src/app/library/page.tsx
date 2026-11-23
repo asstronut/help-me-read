@@ -249,7 +249,7 @@ function ShelfBook({
             !book.extracted && 'opacity-55',
           )}
         >
-          <BookCover book={book} className="shadow-[0_8px_20px_var(--shadow)]" />
+          <BookCover book={book} className="shadow-[0_1px_2px_var(--shadow),0_4px_12px_var(--shadow)]" />
         </Link>
         {/* Outside the link, so trying again does not open the book. */}
         {broken && (
@@ -331,7 +331,7 @@ function ContinueReading({
   return (
     <section aria-labelledby="continue" className="group/book flex flex-wrap items-center gap-5 sm:gap-8">
       <div className="relative w-32 shrink-0 sm:w-[200px] lg:w-[220px]">
-        <BookCover book={book} className="shadow-[0_14px_30px_var(--shadow)]" />
+        <BookCover book={book} className="shadow-[0_1px_3px_var(--shadow),0_8px_20px_var(--shadow)]" />
         <BookMenu
           title={book.title}
           disabled={confirming || renaming}
