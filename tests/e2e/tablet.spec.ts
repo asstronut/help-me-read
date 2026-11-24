@@ -244,14 +244,19 @@ test.describe('on a tablet', () => {
 
   test('a tap on the book while Aa is open only closes it', async ({ page }) => {
     await openBook(page);
+    // On to page 2, so a tap on the left third that got through would show P1 again.
+    await tapAcross(page, 0.85);
+    await expect.poll(() => visibleMarkers(page)).not.toContain('P1');
+    await settle(page);
     await page.getByRole('button', { name: 'Reading settings' }).tap();
     const settings = page.getByRole('dialog', { name: 'Reading settings' });
     await expect(settings).toBeVisible();
 
-    await tapAcross(page, 0.85);
+    // The left third: Aa opens over the right of the book on a tablet.
+    await tapAcross(page, 0.15);
     await expect(settings).toBeHidden();
     await settle(page);
-    expect(await visibleMarkers(page)).toContain('P1');
+    expect(await visibleMarkers(page)).not.toContain('P1');
   });
 
   test('a tap on the book while the contents are open only closes them', async ({ page }) => {
