@@ -106,11 +106,11 @@ export function NoteEditor({ highlight, onSaved, onDeleted, onClose }: Props) {
         <Button variant="danger" onClick={remove} disabled={busy} className="-ml-3.5">
           Delete
         </Button>
-        <div className="flex items-center gap-1">
-          <Button variant="quiet" onClick={onClose}>
+        <div className="flex items-center gap-2">
+          <Button size="compact" onClick={onClose}>
             Close
           </Button>
-          <Button type="submit" variant="primary" disabled={busy}>
+          <Button type="submit" size="compact" variant="primary" disabled={busy}>
             Save
           </Button>
         </div>

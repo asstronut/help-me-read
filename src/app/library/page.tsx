@@ -8,12 +8,21 @@ import { cn } from '@/components/ui/cn';
 import { IconButton } from '@/components/ui/IconButton';
 import { MoreVerticalIcon, RefreshIcon } from '@/components/ui/icons';
 import { InlineAlert } from '@/components/ui/InlineAlert';
+import { MenuItem } from '@/components/ui/MenuItem';
 import { FIELD } from '@/components/ui/field';
+import { Popover } from '@/components/ui/Popover';
 import type { BookItem } from '@/lib/books/book-item';
 import { extractAndSave } from '@/lib/books/extract-and-save';
+import { limit } from '@/lib/books/limit';
 import { MAX_TITLE_CHARS } from '@/lib/types';
 import { BookCover, progressLabel } from './book-cover';
-import { UploadDropzone } from './upload-dropzone';
+import { AddBookButton, DropOverlay, EmptyShelf, useBookUpload, usePageDrop } from './upload-dropzone';
+
+/**
+ * How many books have their text prepared at once. Each one downloads the whole file and parses
+ * it in this tab, so a shelf of new books done all together would freeze the page.
+ */
+const PREPARE_AT_ONCE = 2;
 
 export default function LibraryPage() {
   const [books, setBooks] = useState<BookItem[] | null>(null);
@@ -24,6 +33,7 @@ export default function LibraryPage() {
   const [deleting, setDeleting] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
   const attempted = useRef(new Set<string>());
+  const [queue] = useState(() => limit(PREPARE_AT_ONCE));
   // A list request sent before a delete can answer after it; deleted books stay out of the list.
   const deleted = useRef(new Set<string>());
   const showBooks = useCallback((list: BookItem[]) => {
@@ -53,7 +63,6 @@ export default function LibraryPage() {
 
   const prepare = useCallback(
     async (book: BookItem) => {
-      attempted.current.add(book.id);
       try {
         const meta = await fetch(`/api/books/${book.id}`);
         if (!meta.ok) throw new Error(String(meta.status));
@@ -70,22 +79,26 @@ export default function LibraryPage() {
   );
 
   // Books whose text is not ready (a new upload, or an earlier attempt that was cut short)
-  // are prepared here, once per page visit.
+  // are prepared here, once per page visit, PREPARE_AT_ONCE at a time in shelf order.
   useEffect(() => {
     for (const book of books ?? []) {
-      if (!book.extracted && !attempted.current.has(book.id)) void prepare(book);
+      if (book.extracted || attempted.current.has(book.id)) continue;
+      attempted.current.add(book.id);
+      void queue(() => prepare(book));
     }
-  }, [books, prepare]);
+  }, [books, prepare, queue]);
 
   function retry(book: BookItem) {
-    attempted.current.delete(book.id);
     setFailed((current) => {
       const next = new Set(current);
       next.delete(book.id);
       return next;
     });
-    void prepare(book);
+    void queue(() => prepare(book));
   }
+
+  const upload = useBookUpload(refresh);
+  const dragging = usePageDrop(upload.add);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch on mount
@@ -158,14 +171,11 @@ export default function LibraryPage() {
           <h2 id="shelf" className="font-serif text-[22px]">
             Your books
           </h2>
-          <UploadDropzone onUploaded={refresh} />
+          {/* An empty shelf is itself the place to add a book, so the pill waits for the first one. */}
+          {books && books.length > 0 && <AddBookButton upload={upload} />}
         </div>
-        {books?.length === 0 && (
-          <div className="flex flex-col gap-1 rounded-xl border border-dashed border-rule p-5">
-            <p className="font-serif text-[17px]">No books yet</p>
-            <p className="text-sm text-muted">Add your first one with “Add a book”.</p>
-          </div>
-        )}
+        {upload.error && <InlineAlert>{upload.error}</InlineAlert>}
+        {books?.length === 0 && <EmptyShelf upload={upload} />}
         {books && books.length > 0 && (
           <ul className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-x-4 gap-y-8 sm:grid-cols-[repeat(auto-fill,minmax(150px,1fr))] sm:gap-x-6">
             {books.map((book) => (
@@ -194,6 +204,7 @@ export default function LibraryPage() {
           </ul>
         )}
       </section>
+      {dragging && <DropOverlay busy={upload.busy} />}
     </main>
   );
 }
@@ -223,20 +234,7 @@ type ShelfBookProps = BookActionProps & {
 };
 
 /** One book on the shelf: its cover (which opens it), its title, author and progress, and ⋯. */
-function ShelfBook({
-  book,
-  failed,
-  onRetry,
-  confirming,
-  deleting,
-  onAskDelete,
-  onDelete,
-  onCancelDelete,
-  renaming,
-  onAskRename,
-  onRename,
-  onCancelRename,
-}: ShelfBookProps) {
+function ShelfBook({ book, failed, onRetry, ...actions }: ShelfBookProps) {
   const broken = !book.extracted && failed;
   const preparing = !book.extracted && !failed;
   return (
@@ -264,12 +262,7 @@ function ShelfBook({
             </Button>
           </div>
         )}
-        <BookMenu
-          title={book.title}
-          disabled={confirming || renaming}
-          onRename={onAskRename}
-          onDelete={onAskDelete}
-        />
+        <BookMenu title={book.title} {...actions} />
       </div>
       <div className="flex min-w-0 flex-col gap-0.5">
         <span className="line-clamp-2 text-sm font-medium break-words">{book.title}</span>
@@ -283,61 +276,18 @@ function ShelfBook({
           </span>
         )}
       </div>
-      {renaming && <RenameForm title={book.title} onSave={onRename} onCancel={onCancelRename} />}
-      {confirming && <DeleteConfirm deleting={deleting} onDelete={onDelete} onCancel={onCancelDelete} />}
     </li>
   );
 }
 
-/** Asks before a book goes, with its highlights, threads and notes. */
-function DeleteConfirm({
-  deleting,
-  onDelete,
-  onCancel,
-}: {
-  deleting: boolean;
-  onDelete: () => void;
-  onCancel: () => void;
-}) {
-  return (
-    <div className="flex flex-col gap-2 rounded-xl bg-danger-tint p-3 text-sm">
-      <span>Delete this book with its highlights, threads and notes?</span>
-      <div className="flex flex-wrap gap-1">
-        <Button variant="danger" onClick={onDelete} disabled={deleting}>
-          Yes, delete
-        </Button>
-        <Button variant="quiet" onClick={onCancel} disabled={deleting}>
-          Cancel
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 /** The book read last: its cover, where the reader is in it, a way back in, and ⋯. */
-function ContinueReading({
-  book,
-  confirming,
-  deleting,
-  onAskDelete,
-  onDelete,
-  onCancelDelete,
-  renaming,
-  onAskRename,
-  onRename,
-  onCancelRename,
-}: BookActionProps & { book: BookItem }) {
+function ContinueReading({ book, ...actions }: BookActionProps & { book: BookItem }) {
   const percent = book.progress === null ? null : Math.round(Math.min(Math.max(book.progress, 0), 1) * 100);
   return (
     <section aria-labelledby="continue" className="group/book flex flex-wrap items-center gap-5 sm:gap-8">
       <div className="relative w-32 shrink-0 sm:w-[200px] lg:w-[220px]">
         <BookCover book={book} className="shadow-[0_1px_3px_var(--shadow),0_8px_20px_var(--shadow)]" />
-        <BookMenu
-          title={book.title}
-          disabled={confirming || renaming}
-          onRename={onAskRename}
-          onDelete={onAskDelete}
-        />
+        <BookMenu title={book.title} {...actions} />
       </div>
       <div className="flex min-w-0 flex-[1_1_200px] flex-col gap-3">
         {/* The title and the Continue button say what this is; the heading names it for screen readers. */}
@@ -370,44 +320,207 @@ function ContinueReading({
             Continue
           </Link>
         </div>
-        {(renaming || confirming) && (
-          <div className="max-w-[360px]">
-            {renaming && <RenameForm title={book.title} onSave={onRename} onCancel={onCancelRename} />}
-            {confirming && <DeleteConfirm deleting={deleting} onDelete={onDelete} onCancel={onCancelDelete} />}
-          </div>
-        )}
       </div>
     </section>
   );
 }
 
-/** A new title for a book, under its cover: Save keeps it, Cancel or Escape leaves the old one. */
+/** Rename and Delete open as cards this wide, hanging from the ⋮ button. */
+const CARD_WIDTH = 'w-60 max-w-[calc(100vw-2rem)]';
+
+/**
+ * The ⋮ button in a book cover's top-right corner, and what it opens, each hanging from it over
+ * the shelf so no row moves: the menu (Rename, Delete), then the rename form or the delete check.
+ * It sits inside a `group/book`. With a mouse it shows while that book is hovered or has focus,
+ * or while something it opened is showing; a touch screen has no hover, so there it always shows.
+ */
+function BookMenu({
+  title,
+  confirming,
+  deleting,
+  onAskDelete,
+  onDelete,
+  onCancelDelete,
+  renaming,
+  onAskRename,
+  onRename,
+  onCancelRename,
+}: BookActionProps & { title: string }) {
+  const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const first = useRef<HTMLButtonElement>(null);
+  const popoverId = useId();
+  const showing = open || confirming || renaming;
+
+  useEffect(() => {
+    if (open) first.current?.focus();
+  }, [open]);
+
+  /** Closes whatever is open. Focus goes back to ⋮ unless the reader clicked somewhere else. */
+  function close(refocus: boolean) {
+    setOpen(false);
+    if (renaming) onCancelRename();
+    if (confirming && !deleting) onCancelDelete();
+    if (refocus) trigger.current?.focus();
+  }
+
+  return (
+    <div
+      className={cn(
+        'absolute top-0 right-0 transition-opacity duration-150',
+        // Above the covers after it in the grid, which come later and would otherwise paint over.
+        showing ? 'z-30' : 'z-10',
+        !showing &&
+          '[@media(hover:hover)_and_(pointer:fine)]:opacity-0 group-focus-within/book:opacity-100 group-hover/book:opacity-100',
+      )}
+    >
+      <IconButton
+        ref={trigger}
+        look="floating"
+        aria-label={`Options for ${title}`}
+        aria-expanded={showing}
+        aria-controls={showing ? popoverId : undefined}
+        onClick={() => (showing ? close(false) : setOpen(true))}
+      >
+        <MoreVerticalIcon size={16} />
+      </IconButton>
+      {open && (
+        <Popover
+          id={popoverId}
+          onClose={(reason) => close(reason === 'escape')}
+          // As wide as its longest action, but never a sliver: 128px at least.
+          className="flex w-max min-w-32 flex-col p-1.5"
+        >
+          <MenuItem
+            ref={first}
+            aria-label={`Rename ${title}`}
+            onClick={() => {
+              setOpen(false);
+              onAskRename();
+            }}
+          >
+            Rename
+          </MenuItem>
+          <MenuItem
+            tone="danger"
+            aria-label={`Delete ${title}`}
+            onClick={() => {
+              setOpen(false);
+              onAskDelete();
+            }}
+          >
+            Delete
+          </MenuItem>
+        </Popover>
+      )}
+      {renaming && (
+        <RenameForm
+          id={popoverId}
+          title={title}
+          onSave={async (next) => {
+            const failure = await onRename(next);
+            if (!failure) trigger.current?.focus();
+            return failure;
+          }}
+          onClose={close}
+        />
+      )}
+      {confirming && (
+        <DeleteConfirm id={popoverId} title={title} deleting={deleting} onDelete={onDelete} onClose={close} />
+      )}
+    </div>
+  );
+}
+
+/** Asks before a book goes, naming it, since its highlights, threads and notes go with it. */
+function DeleteConfirm({
+  id,
+  title,
+  deleting,
+  onDelete,
+  onClose,
+}: {
+  id: string;
+  title: string;
+  deleting: boolean;
+  onDelete: () => void;
+  /** `refocus`: put focus back on ⋮. */
+  onClose: (refocus: boolean) => void;
+}) {
+  const headingId = useId();
+  const bodyId = useId();
+  const cancel = useRef<HTMLButtonElement>(null);
+  // The safe choice has focus, so a stray Enter keeps the book.
+  useEffect(() => cancel.current?.focus(), []);
+  return (
+    <Popover
+      id={id}
+      role="alertdialog"
+      fit
+      aria-labelledby={headingId}
+      aria-describedby={bodyId}
+      onClose={(reason) => !deleting && onClose(reason === 'escape')}
+      className={cn(CARD_WIDTH, 'flex flex-col gap-1 px-4 pt-3.5 pb-2.5')}
+    >
+      <p id={headingId} data-fit className="line-clamp-3 font-serif text-base leading-snug break-words">
+        {`Delete “${title}”?`}
+      </p>
+      <p id={bodyId} data-fit className="text-[13px] leading-normal text-muted">
+        Its highlights, threads and notes go too. This can&apos;t be undone.
+      </p>
+      <div className="mt-1.5 flex justify-end gap-2">
+        <Button ref={cancel} size="compact" onClick={() => onClose(true)} disabled={deleting}>
+          Cancel
+        </Button>
+        <Button size="compact" variant="danger" onClick={onDelete} disabled={deleting}>
+          {deleting ? 'Deleting…' : 'Delete'}
+        </Button>
+      </div>
+    </Popover>
+  );
+}
+
+/** Below this many characters left, the rename field shows how many remain. */
+const COUNT_FROM = 40;
+
+/**
+ * A new title for a book, in a card under its ⋮ button. The field grows to show a long title
+ * whole, in the serif the covers use. Enter or Save keeps it; Cancel, Escape, or a click away
+ * (before anything is typed) leaves the old one.
+ */
 function RenameForm({
+  id,
   title,
   onSave,
-  onCancel,
+  onClose,
 }: {
+  id: string;
   title: string;
   onSave: (title: string) => Promise<string | null>;
-  onCancel: () => void;
+  /** `refocus`: put focus back on ⋮. */
+  onClose: (refocus: boolean) => void;
 }) {
   const [value, setValue] = useState(title);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputId = useId();
-  const input = useRef<HTMLInputElement>(null);
+  const countId = useId();
+  const input = useRef<HTMLTextAreaElement>(null);
+  const form = useRef<HTMLFormElement>(null);
   // The form opens from the ⋯ menu, so the field is where the reader expects to type.
   useEffect(() => {
     input.current?.focus();
     input.current?.select();
   }, []);
   const trimmed = value.trim();
-  const tooLong = [...trimmed].length > MAX_TITLE_CHARS;
+  const length = [...trimmed].length;
+  const tooLong = length > MAX_TITLE_CHARS;
+  const left = MAX_TITLE_CHARS - length;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (trimmed === '' || tooLong) return;
-    if (trimmed === title) return onCancel();
+    if (trimmed === '' || tooLong || saving) return;
+    if (trimmed === title) return onClose(true);
     setSaving(true);
     const failure = await onSave(trimmed);
     // On success the form is gone; only a failure needs the form back.
@@ -418,130 +531,59 @@ function RenameForm({
   }
 
   return (
-    <form
-      onSubmit={submit}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape' && !saving) onCancel();
+    <Popover
+      id={id}
+      role="dialog"
+      aria-label="Rename book"
+      onClose={(reason) => {
+        if (saving) return;
+        // A click away keeps what was typed; only Escape or Cancel throws it out.
+        if (reason === 'outside' && trimmed !== title) return;
+        onClose(reason === 'escape');
       }}
-      className="flex flex-col gap-2 rounded-xl bg-chip p-3 text-sm"
+      className={CARD_WIDTH}
     >
-      <label htmlFor={inputId} className="font-medium">
-        Book title
-      </label>
-      <input
-        id={inputId}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        ref={input}
-        disabled={saving}
-        aria-invalid={tooLong || undefined}
-        className={cn(FIELD, 'w-full min-w-0 px-3')}
-      />
-      {tooLong && <span className="text-xs text-danger">{`At most ${MAX_TITLE_CHARS} characters.`}</span>}
-      {error && <InlineAlert>{error}</InlineAlert>}
-      <div className="flex flex-wrap gap-1">
-        <Button type="submit" variant="primary" disabled={saving || trimmed === '' || tooLong}>
-          Save
-        </Button>
-        <Button variant="quiet" onClick={onCancel} disabled={saving}>
-          Cancel
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-/**
- * The ⋮ button in a book cover's top-right corner and the actions it opens: Rename and Delete.
- * It sits inside a `group/book`. With a mouse it shows while that book is hovered or has focus,
- * or while its menu is open; a touch screen has no hover, so there it always shows.
- */
-function BookMenu({
-  title,
-  disabled,
-  onRename,
-  onDelete,
-}: {
-  title: string;
-  disabled: boolean;
-  onRename: () => void;
-  onDelete: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const root = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const first = useRef<HTMLButtonElement>(null);
-  const menuId = useId();
-
-  useEffect(() => {
-    if (!open) return;
-    first.current?.focus();
-    const onPointer = (e: PointerEvent) => {
-      if (!root.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      setOpen(false);
-      trigger.current?.focus();
-    };
-    document.addEventListener('pointerdown', onPointer);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('pointerdown', onPointer);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
-  return (
-    <div
-      ref={root}
-      className={cn(
-        'absolute top-0 right-0 z-10 transition-opacity duration-150',
-        !open &&
-          '[@media(hover:hover)_and_(pointer:fine)]:opacity-0 group-focus-within/book:opacity-100 group-hover/book:opacity-100',
-      )}
-    >
-      <IconButton
-        ref={trigger}
-        look="floating"
-        aria-label={`Options for ${title}`}
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        disabled={disabled}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <MoreVerticalIcon size={16} />
-      </IconButton>
-      {open && (
-        <div
-          id={menuId}
-          className="absolute top-full right-1 flex flex-col items-stretch rounded-xl border border-rule bg-surface p-1 shadow-[0_8px_24px_var(--shadow)]"
-        >
-          <Button
-            ref={first}
-            variant="quiet"
-            aria-label={`Rename ${title}`}
-            className="justify-start text-ink"
-            onClick={() => {
-              setOpen(false);
-              onRename();
-            }}
-          >
-            Rename
+      <form ref={form} onSubmit={submit} className="flex flex-col gap-2 px-4 pt-3.5 pb-2.5">
+        <label htmlFor={inputId} className="text-[13px] font-medium text-muted">
+          Book title
+        </label>
+        <textarea
+          id={inputId}
+          ref={input}
+          value={value}
+          rows={2}
+          // A title is one line of text; a pasted line break becomes a space.
+          onChange={(e) => setValue(e.target.value.replace(/\s*[\r\n]+\s*/g, ' '))}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              form.current?.requestSubmit();
+            }
+          }}
+          disabled={saving}
+          aria-invalid={tooLong || undefined}
+          aria-describedby={left < COUNT_FROM ? countId : undefined}
+          className={cn(
+            FIELD,
+            'h-auto max-h-44 min-h-11 w-full min-w-0 resize-none px-3 py-2.5 font-serif text-base leading-snug field-sizing-content',
+            tooLong && 'border-danger',
+          )}
+        />
+        {left < COUNT_FROM && (
+          <span id={countId} className={cn('text-xs tabular-nums', tooLong ? 'text-danger' : 'text-muted')}>
+            {tooLong ? `${-left} over the ${MAX_TITLE_CHARS}-character limit` : `${left} characters left`}
+          </span>
+        )}
+        {error && <InlineAlert>{error}</InlineAlert>}
+        <div className="mt-0.5 flex justify-end gap-2">
+          <Button size="compact" onClick={() => onClose(true)} disabled={saving}>
+            Cancel
           </Button>
-          <Button
-            variant="danger"
-            className="justify-start"
-            aria-label={`Delete ${title}`}
-            onClick={() => {
-              setOpen(false);
-              onDelete();
-            }}
-          >
-            Delete
+          <Button type="submit" size="compact" variant="primary" disabled={saving || trimmed === '' || tooLong}>
+            {saving ? 'Saving…' : 'Save'}
           </Button>
         </div>
-      )}
-    </div>
+      </form>
+    </Popover>
   );
 }

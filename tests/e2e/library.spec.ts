@@ -48,15 +48,17 @@ test('uploading a PDF shows it with its title and author, and it can be deleted'
 
   // Delete asks first; Cancel keeps the book.
   await askDelete(row);
-  await expect(row).toContainText('Delete this book with its highlights, threads and notes?');
+  await expect(row.getByRole('alertdialog', { name: 'Delete “Sample Book”?' })).toContainText(
+    'Its highlights, threads and notes go too.',
+  );
   await row.getByRole('button', { name: 'Cancel' }).click();
-  await expect(row.getByRole('button', { name: 'Yes, delete' })).toHaveCount(0);
+  await expect(row.getByRole('button', { name: 'Delete', exact: true })).toHaveCount(0);
   await page.reload();
   await expect(row).toBeVisible();
 
   await askDelete(row);
   const deleted = page.waitForResponse((r) => r.request().method() === 'DELETE');
-  await row.getByRole('button', { name: 'Yes, delete' }).click();
+  await row.getByRole('button', { name: 'Delete', exact: true }).click();
   expect((await deleted).status()).toBe(204);
   await expect(page.getByRole('listitem').filter({ hasText: 'Sample Book' })).toHaveCount(0);
 });
@@ -132,7 +134,7 @@ test('a library refresh in flight when a book is deleted does not bring it back'
 
   await askDelete(row);
   const deleted = page.waitForResponse((r) => r.request().method() === 'DELETE');
-  await row.getByRole('button', { name: 'Yes, delete' }).click();
+  await row.getByRole('button', { name: 'Delete', exact: true }).click();
   expect((await deleted).status()).toBe(204);
   await expect(row).toHaveCount(0);
 
@@ -217,7 +219,7 @@ test('a failed delete shows an error and keeps the row', async ({ page }) => {
     route.request().method() === 'DELETE' ? route.fulfill({ status: 500 }) : route.continue(),
   );
   await askDelete(row);
-  await row.getByRole('button', { name: 'Yes, delete' }).click();
+  await row.getByRole('button', { name: 'Delete', exact: true }).click();
   await expect(
     page.getByRole('alert').filter({ hasText: 'Could not delete this book. Please try again.' }),
   ).toBeVisible();
@@ -341,7 +343,7 @@ test('the book on the Continue reading card can be renamed and deleted from its 
   await card.getByRole('button', { name: 'Options for Renamed Book' }).click();
   await card.getByRole('button', { name: 'Delete Renamed Book' }).click();
   const deleted = page.waitForResponse((r) => r.request().method() === 'DELETE');
-  await card.getByRole('button', { name: 'Yes, delete' }).click();
+  await card.getByRole('button', { name: 'Delete', exact: true }).click();
   expect((await deleted).status()).toBe(204);
   await expect(card).toHaveCount(0);
   await expect(page.getByText('No books yet')).toBeVisible();
