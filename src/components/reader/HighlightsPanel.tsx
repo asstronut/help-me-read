@@ -3,10 +3,13 @@
 import { compare as compareCfi } from 'foliate-js/epubcfi.js';
 import { useId, useState, type MouseEvent } from 'react';
 import { IconButton } from '@/components/ui/IconButton';
+import { TapCatcher } from '@/components/ui/TapCatcher';
 import { Tabs, tabId, tabPanelId } from '@/components/ui/Tabs';
+import { cn } from '@/components/ui/cn';
 import { CloseIcon } from '@/components/ui/icons';
 import type { Action, HighlightView } from '@/lib/types';
 import { HIGHLIGHT_HEX, HIGHLIGHT_INKS } from './highlight-colors';
+import { BELOW_TOP_BAR } from './ReaderTopBar';
 
 type Filter = 'all' | 'notes' | 'threads';
 const FILTERS = [
@@ -90,73 +93,77 @@ export function HighlightsPanel({ highlights, chapterOf, hrefOf, onJump, onClose
   }
 
   return (
-    <aside
-      aria-labelledby={headingId}
-      className="fixed inset-x-0 bottom-0 z-40 flex h-[70dvh] flex-col rounded-t-2xl border-t border-rule bg-panel font-sans text-ink shadow-[0_-8px_24px_var(--shadow)] md:inset-x-auto md:top-0 md:right-0 md:h-dvh md:w-[420px] md:rounded-none md:border-t-0 md:border-l md:shadow-none"
-    >
-      <header className="flex flex-col gap-3 pt-2 pr-2 pb-3 pl-5 md:pt-4 md:pr-4">
-        <div className="flex items-center justify-between">
-          <h2 id={headingId} className="font-serif text-xl font-normal">
-            In this book
-          </h2>
-          <IconButton aria-label="Close panel" onClick={onClose}>
-            <CloseIcon />
-          </IconButton>
-        </div>
-        <Tabs
-          label="Filter"
-          options={FILTERS}
-          value={filter}
-          onChange={setFilter}
-          idPrefix={id}
-          className="mr-2 md:mr-0"
-        />
-      </header>
-      <div
-        id={tabPanelId(id)}
-        role="tabpanel"
-        aria-labelledby={tabId(id, filter)}
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pt-1 pb-5"
+    <>
+      {/* On a phone the panel is a sheet over the book: a tap on the book above it closes it. */}
+      <TapCatcher onTap={onClose} className={cn(BELOW_TOP_BAR, 'z-39 md:hidden')} />
+      <aside
+        aria-labelledby={headingId}
+        className="fixed inset-x-0 bottom-0 z-40 flex h-[70dvh] flex-col rounded-t-2xl border-t border-rule bg-panel font-sans text-ink shadow-[0_-8px_24px_var(--shadow)] md:inset-x-auto md:top-0 md:right-0 md:h-dvh md:w-[420px] md:rounded-none md:border-t-0 md:border-l md:shadow-none"
       >
-        <p className="pt-2 text-xs text-muted">
-          {shown.length} {shown.length === 1 ? 'item' : 'items'}
-        </p>
-        {shown.length === 0 && <p className="pt-4 text-sm text-muted">{EMPTY[filter]}</p>}
-        {groups.map(([chapter, items]) => (
-          <div key={chapter} className="flex flex-col">
-            <h3 className="mt-4 mb-1 text-[11px] font-medium tracking-[0.1em] text-muted uppercase">
-              {chapter}
-            </h3>
-            <ul>
-              {items.map((h) => (
-                <li key={h.id} className="border-b border-rule">
-                  <a
-                    href={hrefOf(h)}
-                    onClick={(e) => onClick(e, h)}
-                    className="flex gap-3 rounded-lg py-3 transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-accent"
-                  >
-                    <span
-                      aria-hidden="true"
-                      className="mt-[7px] size-2.5 shrink-0 rounded-full"
-                      style={{
-                        background: h.kind === 'thread' ? HIGHLIGHT_INKS[h.color] : HIGHLIGHT_HEX[h.color],
-                      }}
-                    />
-                    <span className="flex min-w-0 flex-1 flex-col gap-1">
-                      <span className="line-clamp-3 font-serif text-[15px] leading-normal break-words text-ink">
-                        “{h.quote}”
-                      </span>
-                      <span className="line-clamp-2 text-[13px] leading-snug break-words text-muted">
-                        {meta(h)}
-                      </span>
-                    </span>
-                  </a>
-                </li>
-              ))}
-            </ul>
+        <header className="flex flex-col gap-3 pt-2 pr-2 pb-3 pl-5 md:pt-4 md:pr-4">
+          <div className="flex items-center justify-between">
+            <h2 id={headingId} className="font-serif text-xl font-normal">
+              In this book
+            </h2>
+            <IconButton aria-label="Close panel" onClick={onClose}>
+              <CloseIcon />
+            </IconButton>
           </div>
-        ))}
-      </div>
-    </aside>
+          <Tabs
+            label="Filter"
+            options={FILTERS}
+            value={filter}
+            onChange={setFilter}
+            idPrefix={id}
+            className="mr-2 md:mr-0"
+          />
+        </header>
+        <div
+          id={tabPanelId(id)}
+          role="tabpanel"
+          aria-labelledby={tabId(id, filter)}
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pt-1 pb-5"
+        >
+          <p className="pt-2 text-xs text-muted">
+            {shown.length} {shown.length === 1 ? 'item' : 'items'}
+          </p>
+          {shown.length === 0 && <p className="pt-4 text-sm text-muted">{EMPTY[filter]}</p>}
+          {groups.map(([chapter, items]) => (
+            <div key={chapter} className="flex flex-col">
+              <h3 className="mt-4 mb-1 text-[11px] font-medium tracking-[0.1em] text-muted uppercase">
+                {chapter}
+              </h3>
+              <ul>
+                {items.map((h) => (
+                  <li key={h.id} className="border-b border-rule">
+                    <a
+                      href={hrefOf(h)}
+                      onClick={(e) => onClick(e, h)}
+                      className="flex gap-3 rounded-lg py-3 transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-accent"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="mt-[7px] size-2.5 shrink-0 rounded-full"
+                        style={{
+                          background: h.kind === 'thread' ? HIGHLIGHT_INKS[h.color] : HIGHLIGHT_HEX[h.color],
+                        }}
+                      />
+                      <span className="flex min-w-0 flex-1 flex-col gap-1">
+                        <span className="line-clamp-3 font-serif text-[15px] leading-normal break-words text-ink">
+                          “{h.quote}”
+                        </span>
+                        <span className="line-clamp-2 text-[13px] leading-snug break-words text-muted">
+                          {meta(h)}
+                        </span>
+                      </span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </aside>
+    </>
   );
 }

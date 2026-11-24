@@ -20,6 +20,12 @@ type Props = {
   className?: string;
 };
 
+/**
+ * Where the book starts, under the bar: 44px controls and `py-1` around them. A tap catcher for a
+ * sheet over the book starts here, so the bar's buttons keep working while the sheet is open.
+ */
+export const BELOW_TOP_BAR = 'top-13';
+
 /** The bar above the book: back to the Library, the book's title, and the reader's own controls. */
 export function ReaderTopBar({
   title,

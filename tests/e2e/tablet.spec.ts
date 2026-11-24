@@ -241,6 +241,35 @@ test.describe('on a tablet', () => {
     await settle(page);
     expect(await visibleMarkers(page)).toContain('P1');
   });
+
+  test('a tap on the book while Aa is open only closes it', async ({ page }) => {
+    await openBook(page);
+    // On to page 2, so a tap on the left third that got through would show P1 again.
+    await tapAcross(page, 0.85);
+    await expect.poll(() => visibleMarkers(page)).not.toContain('P1');
+    await settle(page);
+    await page.getByRole('button', { name: 'Reading settings' }).tap();
+    const settings = page.getByRole('dialog', { name: 'Reading settings' });
+    await expect(settings).toBeVisible();
+
+    // The left third: Aa opens over the right of the book on a tablet.
+    await tapAcross(page, 0.15);
+    await expect(settings).toBeHidden();
+    await settle(page);
+    expect(await visibleMarkers(page)).not.toContain('P1');
+  });
+
+  test('a tap on the book while the contents are open only closes them', async ({ page }) => {
+    await openBook(page);
+    const contents = page.getByRole('button', { name: 'Contents' });
+    await contents.tap();
+    await expect(contents).toHaveAttribute('aria-expanded', 'true');
+
+    await tapAcross(page, 0.85);
+    await expect(contents).toHaveAttribute('aria-expanded', 'false');
+    await settle(page);
+    expect(await visibleMarkers(page)).toContain('P1');
+  });
 });
 
 test.describe('on a tablet held upright', () => {
@@ -294,5 +323,19 @@ test.describe('on a phone', () => {
     await expect(settings).toBeHidden();
     await tapAcross(page, 0.5);
     await expect(settings).toBeVisible();
+  });
+
+  test('a tap above the highlights sheet closes it and turns no page', async ({ page }) => {
+    await openBook(page);
+    await page.getByRole('button', { name: 'Highlights and threads' }).tap();
+    const sheet = page.getByRole('complementary', { name: 'In this book' });
+    await expect(sheet).toBeVisible();
+
+    // Over the book's right third, above the sheet (which covers the lower 70% of the screen).
+    const box = await bookBox(page);
+    await page.touchscreen.tap(box.x + box.width * 0.85, box.y + 40);
+    await expect(sheet).toBeHidden();
+    await settle(page);
+    expect(await visibleMarkers(page)).toContain('P1');
   });
 });

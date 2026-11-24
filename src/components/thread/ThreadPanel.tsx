@@ -8,8 +8,11 @@ import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import { InlineAlert } from '@/components/ui/InlineAlert';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { TapCatcher } from '@/components/ui/TapCatcher';
+import { cn } from '@/components/ui/cn';
 import { ArrowUpIcon, CloseIcon, RefreshIcon } from '@/components/ui/icons';
 import type { Action, ContextScope, ReaderSelection } from '@/lib/types';
+import { BELOW_TOP_BAR } from '@/components/reader/ReaderTopBar';
 import { MessageView } from './MessageView';
 import { ModelSwitcher } from './ModelSwitcher';
 
@@ -337,149 +340,156 @@ export function ThreadPanel(props: Props) {
     </InlineAlert>
   );
 
+  // On a phone the panel is a sheet over the book, and a tap on the book above it closes it, unless that would
+  // lose something: a question being typed, an answer on its way, or a delete under way.
+  const dismissible = pending === null && !draft.trim() && !confirmingDelete && !deleting;
+
   return (
-    <aside
-      aria-label="Thread"
-      className="fixed inset-x-0 bottom-0 z-40 flex h-[70dvh] flex-col rounded-t-2xl border-t border-rule bg-panel font-sans text-ink shadow-[0_-8px_24px_var(--shadow)] md:inset-x-auto md:top-0 md:right-0 md:h-dvh md:w-[420px] md:rounded-none md:border-t-0 md:border-l md:shadow-none"
-    >
-      <header className="flex items-center justify-between gap-2 py-2 pr-2 pl-5 md:pt-4 md:pr-4">
-        <h2 className="text-[11px] font-normal tracking-[0.1em] text-muted uppercase">
-          {action ? TITLES[action] : 'Thread'}
-        </h2>
-        <div className="flex items-center">
-          {highlightId && !confirmingDelete && (
-            <Button variant="danger" onClick={() => setConfirmingDelete(true)} disabled={busy} className="text-[13px]">
-              Delete thread
-            </Button>
-          )}
-          <IconButton aria-label="Close" onClick={onClose}>
-            <CloseIcon />
-          </IconButton>
-        </div>
-      </header>
-      {confirmingDelete && (
-        <div className="mx-4 mb-2 flex flex-wrap items-center justify-between gap-x-2 rounded-xl bg-danger-tint py-1 pr-1 pl-4 text-sm">
-          <span>Delete this conversation?</span>
-          <div className="flex">
-            <Button variant="danger" onClick={() => void confirmDelete()} disabled={deleting} className="font-medium">
-              Yes, delete
-            </Button>
-            <Button variant="quiet" onClick={() => setConfirmingDelete(false)} disabled={deleting}>
-              Cancel
-            </Button>
+    <>
+      {dismissible && <TapCatcher onTap={onClose} className={cn(BELOW_TOP_BAR, 'z-39 md:hidden')} />}
+      <aside
+        aria-label="Thread"
+        className="fixed inset-x-0 bottom-0 z-40 flex h-[70dvh] flex-col rounded-t-2xl border-t border-rule bg-panel font-sans text-ink shadow-[0_-8px_24px_var(--shadow)] md:inset-x-auto md:top-0 md:right-0 md:h-dvh md:w-[420px] md:rounded-none md:border-t-0 md:border-l md:shadow-none"
+      >
+        <header className="flex items-center justify-between gap-2 py-2 pr-2 pl-5 md:pt-4 md:pr-4">
+          <h2 className="text-[11px] font-normal tracking-[0.1em] text-muted uppercase">
+            {action ? TITLES[action] : 'Thread'}
+          </h2>
+          <div className="flex items-center">
+            {highlightId && !confirmingDelete && (
+              <Button variant="danger" onClick={() => setConfirmingDelete(true)} disabled={busy} className="text-[13px]">
+                Delete thread
+              </Button>
+            )}
+            <IconButton aria-label="Close" onClick={onClose}>
+              <CloseIcon />
+            </IconButton>
           </div>
-        </div>
-      )}
+        </header>
+        {confirmingDelete && (
+          <div className="mx-4 mb-2 flex flex-wrap items-center justify-between gap-x-2 rounded-xl bg-danger-tint py-1 pr-1 pl-4 text-sm">
+            <span>Delete this conversation?</span>
+            <div className="flex">
+              <Button variant="danger" onClick={() => void confirmDelete()} disabled={deleting} className="font-medium">
+                Yes, delete
+              </Button>
+              <Button variant="quiet" onClick={() => setConfirmingDelete(false)} disabled={deleting}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
 
-      {composing ? (
-        <form onSubmit={onAsk} className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 pt-1 pb-4">
-          {quoted}
-          <label className="flex flex-col gap-1.5 text-[13px]">
-            <span className="font-medium">Your question</span>
-            <textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              rows={4}
-              placeholder="What would you like to know about this passage?"
-              className="resize-y rounded-xl border border-rule bg-surface px-3.5 py-3 text-[15px] leading-normal text-ink placeholder:text-muted focus-visible:outline-2 focus-visible:outline-accent"
-            />
-          </label>
-          <div className="flex flex-col gap-1.5">
-            {/* The radio group is named "Answer using" too; this is its visible label. */}
-            <span aria-hidden="true" className="text-[13px] font-medium">
-              Answer using
-            </span>
-            <SegmentedControl label="Answer using" options={SCOPES} value={askScope} onChange={setAskScope} />
-            <span className="text-xs leading-snug text-muted">Whole book sends more text, so it costs more.</span>
-          </div>
-          {alert}
-          <div className="mt-auto flex items-center justify-between gap-3">
-            <ModelSwitcher models={available} value={modelId} onChange={setPicked} disabled />
-            <Button type="submit" variant="primary" disabled={busy || !draft.trim()}>
-              Ask
-            </Button>
-          </div>
-        </form>
-      ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-[18px] overflow-y-auto px-5 pt-1 pb-5">
-          {quoted}
-          {thread.map((m) =>
-            m.role === 'user' ? (
-              <p key={m.id} className="max-w-[85%] self-end rounded-2xl bg-chip px-3.5 py-2 text-sm break-words">
-                {m.content}
-              </p>
-            ) : (
-              <MessageView
-                key={m.id}
-                content={m.content}
-                modelLabel={label(m.modelId)}
-                failed={m.status === 'failed'}
-              >
-                {m === latest && (
-                  <Button onClick={reask} disabled={busy} className="text-[13px]">
-                    <RefreshIcon size={14} />
-                    {m.status === 'failed' ? 'Retry' : 'Re-ask'}
-                  </Button>
-                )}
-              </MessageView>
-            ),
-          )}
-          {pending?.question && (
-            <p className="max-w-[85%] self-end rounded-2xl bg-chip px-3.5 py-2 text-sm break-words">
-              {pending.question}
-            </p>
-          )}
-          {pending && streaming && (
-            <MessageView
-              content={textOf(streaming)}
-              modelLabel={label(streaming.metadata?.modelId ?? null)}
-              failed={false}
-            />
-          )}
-          {pending && !streaming && <p className="text-sm text-muted">Thinking…</p>}
-          {alert}
-          {unanswered && !busy && (
-            <Button onClick={reask} className="self-start text-[13px]">
-              <RefreshIcon size={14} />
-              Retry
-            </Button>
-          )}
-        </div>
-      )}
-
-      {!composing && (
-        <footer className="flex flex-col px-4 pt-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:pb-3">
-          {!unanswered && (
-            <form
-              onSubmit={onFollowUp}
-              className="flex items-center gap-2 rounded-[14px] border border-rule bg-surface p-1 pl-3.5 focus-within:outline-2 focus-within:outline-accent"
-            >
-              <label className="sr-only" htmlFor="thread-follow-up">
-                Follow-up
-              </label>
-              <input
-                id="thread-follow-up"
+        {composing ? (
+          <form onSubmit={onAsk} className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 pt-1 pb-4">
+            {quoted}
+            <label className="flex flex-col gap-1.5 text-[13px]">
+              <span className="font-medium">Your question</span>
+              <textarea
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                placeholder="Ask a follow-up…"
-                className="min-w-0 flex-1 bg-transparent py-2.5 text-sm text-ink outline-none placeholder:text-muted"
+                rows={4}
+                placeholder="What would you like to know about this passage?"
+                className="resize-y rounded-xl border border-rule bg-surface px-3.5 py-3 text-[15px] leading-normal text-ink placeholder:text-muted focus-visible:outline-2 focus-visible:outline-accent"
               />
-              <button
-                type="submit"
-                aria-label="Send"
-                disabled={busy || !draft.trim() || !threadId}
-                className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-[10px] bg-ink text-bg transition-opacity focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-40"
-              >
-                <ArrowUpIcon size={16} strokeWidth={1.8} />
-              </button>
-            </form>
-          )}
-          <div className="flex items-center justify-between gap-3 text-xs text-muted">
-            <ModelSwitcher models={available} value={modelId} onChange={setPicked} disabled={busy} />
-            <span className="shrink-0">Context: {scope === 'book' ? 'whole book' : 'this page'}</span>
+            </label>
+            <div className="flex flex-col gap-1.5">
+              {/* The radio group is named "Answer using" too; this is its visible label. */}
+              <span aria-hidden="true" className="text-[13px] font-medium">
+                Answer using
+              </span>
+              <SegmentedControl label="Answer using" options={SCOPES} value={askScope} onChange={setAskScope} />
+              <span className="text-xs leading-snug text-muted">Whole book sends more text, so it costs more.</span>
+            </div>
+            {alert}
+            <div className="mt-auto flex items-center justify-between gap-3">
+              <ModelSwitcher models={available} value={modelId} onChange={setPicked} disabled />
+              <Button type="submit" variant="primary" disabled={busy || !draft.trim()}>
+                Ask
+              </Button>
+            </div>
+          </form>
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col gap-[18px] overflow-y-auto px-5 pt-1 pb-5">
+            {quoted}
+            {thread.map((m) =>
+              m.role === 'user' ? (
+                <p key={m.id} className="max-w-[85%] self-end rounded-2xl bg-chip px-3.5 py-2 text-sm break-words">
+                  {m.content}
+                </p>
+              ) : (
+                <MessageView
+                  key={m.id}
+                  content={m.content}
+                  modelLabel={label(m.modelId)}
+                  failed={m.status === 'failed'}
+                >
+                  {m === latest && (
+                    <Button onClick={reask} disabled={busy} className="text-[13px]">
+                      <RefreshIcon size={14} />
+                      {m.status === 'failed' ? 'Retry' : 'Re-ask'}
+                    </Button>
+                  )}
+                </MessageView>
+              ),
+            )}
+            {pending?.question && (
+              <p className="max-w-[85%] self-end rounded-2xl bg-chip px-3.5 py-2 text-sm break-words">
+                {pending.question}
+              </p>
+            )}
+            {pending && streaming && (
+              <MessageView
+                content={textOf(streaming)}
+                modelLabel={label(streaming.metadata?.modelId ?? null)}
+                failed={false}
+              />
+            )}
+            {pending && !streaming && <p className="text-sm text-muted">Thinking…</p>}
+            {alert}
+            {unanswered && !busy && (
+              <Button onClick={reask} className="self-start text-[13px]">
+                <RefreshIcon size={14} />
+                Retry
+              </Button>
+            )}
           </div>
-        </footer>
-      )}
-    </aside>
+        )}
+
+        {!composing && (
+          <footer className="flex flex-col px-4 pt-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:pb-3">
+            {!unanswered && (
+              <form
+                onSubmit={onFollowUp}
+                className="flex items-center gap-2 rounded-[14px] border border-rule bg-surface p-1 pl-3.5 focus-within:outline-2 focus-within:outline-accent"
+              >
+                <label className="sr-only" htmlFor="thread-follow-up">
+                  Follow-up
+                </label>
+                <input
+                  id="thread-follow-up"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  placeholder="Ask a follow-up…"
+                  className="min-w-0 flex-1 bg-transparent py-2.5 text-sm text-ink outline-none placeholder:text-muted"
+                />
+                <button
+                  type="submit"
+                  aria-label="Send"
+                  disabled={busy || !draft.trim() || !threadId}
+                  className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-[10px] bg-ink text-bg transition-opacity focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-40"
+                >
+                  <ArrowUpIcon size={16} strokeWidth={1.8} />
+                </button>
+              </form>
+            )}
+            <div className="flex items-center justify-between gap-3 text-xs text-muted">
+              <ModelSwitcher models={available} value={modelId} onChange={setPicked} disabled={busy} />
+              <span className="shrink-0">Context: {scope === 'book' ? 'whole book' : 'this page'}</span>
+            </div>
+          </footer>
+        )}
+      </aside>
+    </>
   );
 }
