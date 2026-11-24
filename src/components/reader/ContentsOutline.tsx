@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode 
 import { IconButton } from '@/components/ui/IconButton';
 import { cn } from '@/components/ui/cn';
 import { ChevronRightIcon, MenuIcon } from '@/components/ui/icons';
+import { TapCatcher } from '@/components/ui/TapCatcher';
 import { usePresence } from '@/components/ui/usePresence';
 import { findItem, type ContentsItem } from '@/lib/reader/contents';
 
@@ -89,7 +90,8 @@ export function ContentsOutline({
   const listId = useId();
   const navRef = useRef<HTMLElement>(null);
 
-  // The list closes on Escape and on a press anywhere else.
+  // The list closes on Escape, and on a tap anywhere else: on the TapCatcher, which keeps that tap
+  // from also turning the page.
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -97,19 +99,18 @@ export function ContentsOutline({
       setOpen(false);
       navRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
     };
+    // A press on something above the catcher, such as the Aa popover or the selection menu.
     const onPress = (e: PointerEvent) => {
-      if (!navRef.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Element;
+      // Closing on the catcher's press would take it away before its click, which would then land on the book.
+      if (target.closest?.('[data-tap-catcher]') || navRef.current?.contains(target)) return;
+      setOpen(false);
     };
-    // The EPUB text is in an iframe, whose presses never reach this document: leaving the window
-    // for it shows up as a blur.
-    const onBlur = () => setOpen(false);
     document.addEventListener('keydown', onKey);
     document.addEventListener('pointerdown', onPress);
-    window.addEventListener('blur', onBlur);
     return () => {
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('pointerdown', onPress);
-      window.removeEventListener('blur', onBlur);
     };
   }, [open]);
 
@@ -139,6 +140,8 @@ export function ContentsOutline({
       {placement === 'rail' && items && items.length > 0 && (
         <ChapterTicks items={items} currentId={currentId} onGo={go} />
       )}
+      {/* Just under the card, and over an open thread or highlights panel (z-40). */}
+      {open && <TapCatcher onTap={() => setOpen(false)} className="z-44" />}
       {floating.mounted && (
         <FloatingCard
           // Only the open card is the one the button controls.
@@ -315,7 +318,7 @@ function FloatingCard({
       data-closing={closing ? '' : undefined}
       className={cn(
         SCROLLS,
-        'motion-drop z-30 max-h-[70dvh] rounded-xl border border-rule bg-surface px-3 py-2 text-ink shadow-[0_8px_24px_var(--shadow)]',
+        'motion-drop z-45 max-h-[70dvh] rounded-xl border border-rule bg-surface px-3 py-2 text-ink shadow-[0_8px_24px_var(--shadow)]',
         placement === 'rail' ? 'absolute top-12 -left-[13px] w-72' : 'fixed inset-x-2 top-14',
       )}
     >

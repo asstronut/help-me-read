@@ -5,6 +5,7 @@ import { IconButton } from '@/components/ui/IconButton';
 import { InlineAlert } from '@/components/ui/InlineAlert';
 import { LanguagePicker } from '@/components/ui/LanguagePicker';
 import { SegmentedControl, type SegmentOption } from '@/components/ui/SegmentedControl';
+import { TapCatcher } from '@/components/ui/TapCatcher';
 import { cn } from '@/components/ui/cn';
 import { LANGUAGE_LABELS, type BookLanguages, type Languages } from '@/lib/languages';
 import {
@@ -120,15 +121,24 @@ function useThemeChoice() {
 export function ReadingSettings({ children }: { children?: ReactNode }) {
   const id = useId();
   const { theme, choose, error } = useThemeChoice();
+  const popover = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const close = () => {
+    if (popover.current?.matches(':popover-open')) popover.current.hidePopover();
+  };
   return (
     <>
       <IconButton aria-label="Reading settings" popoverTarget={id} className="font-serif text-[17px]">
         Aa
       </IconButton>
-      {/* A native popover: it closes on Escape and on a click outside it, and sits above the book. */}
+      {/* The browser's own light dismiss misses taps on the EPUB text (an iframe), and would let them turn the page. */}
+      {open && <TapCatcher onTap={close} className="z-44" />}
+      {/* A native popover: it closes on Escape and on a tap outside it, and sits above the book. */}
       <div
+        ref={popover}
         id={id}
         popover="auto"
+        onToggle={(e) => setOpen(e.newState === 'open')}
         role="dialog"
         aria-label="Reading settings"
         className={cn(
