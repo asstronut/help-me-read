@@ -20,10 +20,11 @@ The visual design lives on the "Help Me Read — UI Makeover" canvas (a claude.a
 
 - **Keep accessible names stable.** The e2e tests find controls by role and name (`Next page`, `Zoom in`, `Save to vocab`, …). Restyle freely, but when a name or visible text must change, update the test in the same PR and say so in the PR description.
 - **Use the theme tokens, not raw colours.** Every colour comes from the tokens in `src/app/globals.css` (`bg`, `surface`, `panel`, `chip`, `ink`, `muted`, `rule`, `accent`, `danger`), defined for `.light`, `.sepia` and `.dark`.
-- **44px touch targets** for every button and link.
+- **44px touch targets** for every button and link. The one exception is a `MenuItem` row, which is 36px when a mouse is the pointer and 44px on touch.
+- **Two button sizes.** `Button` is `regular` for an action that stands on the page (Continue, Save changes). Inside a popover, dialog or small card, use `size="compact"`: a 36px filled shape inside the same 44px target, with `secondary` for Cancel, `primary` for Save and `danger` for a confirmed delete.
 - **Check all three themes** (Light, Sepia, Dark) before merging.
 - **Desktop first, tablet second.** There are no phone designs, but the e2e suite has a phone project, so every change must still work at phone width (stacked, not designed).
-- **Build from the shared primitives** in `src/components/ui/`: `Button` (primary / secondary / quiet / danger), `IconButton` (44px, `aria-label` required), `SegmentedControl`, `InlineAlert` (errors, with an action), `Toast` (status pill), and the icons in `icons.tsx`. Add a primitive there rather than one-off styling.
+- **Build from the shared primitives** in `src/components/ui/`: `Button` (primary / secondary / quiet / danger, regular or compact), `IconButton` (44px, `aria-label` required), `Popover` (a card hanging from its anchor), `MenuItem`, `SegmentedControl`, `InlineAlert` (errors, with an action), `Toast` (status pill), and the icons in `icons.tsx`. Add a primitive there rather than one-off styling.
 - **Fonts:** Literata for reading text and serif titles, Geist for the interface.
 - **Highlight colours** come only from `src/components/reader/highlight-colors.ts`.
 
