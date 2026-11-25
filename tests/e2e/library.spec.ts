@@ -245,7 +245,9 @@ test('the reading progress saved in the reader shows in the library', async ({ p
   await expect(row).toContainText('PDF · New', { timeout: 30_000 });
 
   await row.getByRole('link', { name: 'Sample Book' }).click();
-  await expect(page.getByLabel('Page number')).toHaveValue('1');
+  // When this is the dev server's first visit to a reader, `next dev` compiles the /read route and
+  // then the PDF reader's chunks on the way (about 6s here, against about 1.5s once compiled).
+  await expect(page.getByLabel('Page number')).toHaveValue('1', { timeout: 30_000 });
   const saved = page.waitForRequest(
     (r) => r.method() === 'PUT' && r.url().endsWith('/position') && r.postDataJSON().page === 2,
   );
