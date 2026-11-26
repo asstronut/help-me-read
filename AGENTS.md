@@ -28,6 +28,21 @@ The visual design lives on the "Help Me Read — UI Makeover" canvas (a claude.a
 - **Fonts:** Literata for reading text and serif titles, Geist for the interface.
 - **Highlight colours** come only from `src/components/reader/highlight-colors.ts`.
 
+## Storyboard before code
+
+A new interaction, or a change to how an existing one behaves, needs a storyboard on the canvas, approved by the human, before any code. A restyle that keeps the behaviour does not.
+
+- **Steps × devices.** One row per step of each flow (how the reader gets in, each action, how they get out), one column per device: desktop (mouse), tablet landscape, tablet portrait, phone. PDF gets the full grid; EPUB gets the rows where it behaves differently (placement, two-page spread, near an edge).
+- **Check every row against these seven**, adding frames where one changes what the reader sees:
+  1. **Theme**: Light, Sepia, Dark; at least one Dark frame per flow.
+  2. **Input**: mouse, touch, keyboard only (focus order, Esc, where focus goes after), screen reader names.
+  3. **States**: empty, saving, error, offline, very long content.
+  4. **Position and layout**: next to a screen edge, a zoomed PDF, a two-page spread, a side panel open.
+  5. **Leaving the flow**: a page turn, a new selection, another panel opening while it is open. Say what happens to unsaved input.
+  6. **First time vs heavy use**: no data yet vs many overlapping items.
+  7. **Tests**: each frame names the e2e test that covers it, or says "manual check".
+- **Wait for approval.** Open questions stay marked on the frame until the human answers them. Build only what the approved frames show.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 ## This is NOT the Next.js you know
